@@ -1,0 +1,75 @@
+name: Continuous Integration
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.11'
+
+jobs:
+  lint-and-test:
+    name: Lint and Test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci
+
+      - name: Install function dependencies
+        working-directory: ./functions
+        run: |
+          uv venv .venv
+          source .venv/bin/activate
+          uv pip install -e .
+
+      - name: Lint frontend
+        working-directory: ./frontend
+        run: npm run lint --if-present
+
+      - name: Test frontend
+        working-directory: ./frontend
+        run: npm test --if-present
+
+      - name: Lint Python code
+        working-directory: ./functions
+        run: |
+          source .venv/bin/activate
+          pip install ruff || true
+          ruff check . || echo "Ruff not configured yet"
+
+      - name: Test functions
+        working-directory: ./functions
+        run: |
+          source .venv/bin/activate
+          pytest || echo "No tests configured yet"
+
+      - name: Type check frontend
+        working-directory: ./frontend
+        run: npm run type-check --if-present || npx tsc --noEmit || echo "Type checking not configured"

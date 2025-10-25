@@ -1,0 +1,23 @@
+[project]
+name = "ttb-label-checker-functions"
+version = "0.1.0"
+description = "Firebase Cloud Functions for TTB Label Verification System"
+requires-python = ">=3.11"
+dependencies = [
+    "firebase-functions>=0.4.0",
+    "firebase-admin>=6.5.0",
+    "google-cloud-vision>=3.7.0",
+    "pillow>=10.3.0",
+    "fuzzywuzzy>=0.18.0",
+    "python-Levenshtein>=0.25.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = [
+    "pytest>=8.2.0",
+    "pytest-mock>=3.14.0",
+]
