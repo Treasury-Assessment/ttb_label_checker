@@ -36,9 +36,9 @@ This system provides a simplified compliance pre-check for alcohol beverage labe
 - **Firebase Storage** for temporary image storage
 
 ### Infrastructure
-- **Firebase Hosting** (frontend)
+- **Firebase App Hosting** (frontend - auto-deploy on push)
 - **Firebase Cloud Functions** (backend)
-- **GitHub Actions** (CI/CD)
+- **GitHub Actions** (CI - testing and linting only)
 
 ## Project Structure
 
@@ -210,13 +210,28 @@ See [docs/prd.md](./docs/prd.md) Section 16.3 for details.
 
 ## CI/CD
 
-GitHub Actions workflows are configured for:
+### Continuous Integration (GitHub Actions)
 
-- ✅ **Continuous Integration**: Runs tests on every push and PR
-- ✅ **Automatic Deployment**: Deploys to Firebase on push to `main`
-- ✅ **Preview Deployments**: Creates preview URLs for pull requests
+GitHub Actions runs on every push and pull request to:
 
-See [.github/workflows/](./.github/workflows/) for workflow configurations.
+- ✅ **Lint**: ESLint for frontend, Ruff for Python
+- ✅ **Test**: Run all unit and integration tests
+- ✅ **Type Check**: TypeScript strict mode verification
+- ✅ **Build**: Verify frontend builds successfully
+- ✅ **Verify**: Ensure requirements.txt is up to date
+
+See [.github/workflows/ci.yml](./.github/workflows/ci.yml) for configuration.
+
+### Automatic Deployment (Firebase App Hosting)
+
+Firebase App Hosting automatically deploys on every push to `main`:
+
+- 🚀 **Production**: Automatic deployment from `main` branch
+- 🔍 **Previews**: Automatic preview deployments for pull requests
+- ⚡ **Fast**: Built on Cloud Run for serverless scaling
+- 🔄 **Integrated**: Frontend and backend deployed together
+
+No manual deployment steps required - Firebase handles everything automatically.
 
 ## Testing
 

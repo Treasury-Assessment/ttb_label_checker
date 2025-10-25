@@ -20,11 +20,10 @@ The Firebase project and repository structure have been initialized successfully
 3. **Backend (Python Cloud Functions)**
    - `functions/main.py` - Cloud Function entry point
    - `functions/pyproject.toml` - Dependencies (uv)
-   - Python 3.11 configuration
+   - Python 3.13 configuration
 
 4. **CI/CD (GitHub Actions)**
-   - `.github/workflows/firebase-deploy.yml` - Deployment workflow
-   - `.github/workflows/ci.yml` - Continuous integration
+   - `.github/workflows/ci.yml` - Continuous integration (testing & linting only)
 
 5. **Documentation**
    - `README.md` - Project overview
@@ -36,24 +35,22 @@ The Firebase project and repository structure have been initialized successfully
 
 ## 🚀 Immediate Next Steps
 
-### 1. Configure Firebase Service Account for GitHub Actions
-
-**Important**: Before pushing to GitHub, you need to set up the Firebase service account for automated deployments.
-
-Follow these steps from [SETUP.md](./SETUP.md#firebase-service-account-setup):
-
-1. Go to [Firebase Console](https://console.firebase.google.com/) → ttb-label-checker
-2. Settings → Service accounts → Generate new private key
-3. Add the JSON contents to GitHub Secrets as `FIREBASE_SERVICE_ACCOUNT`
-
-### 2. Enable Firebase Services
+### 1. Enable Firebase Services
 
 In the Firebase Console, enable:
 
-- ✅ **Hosting** - For frontend deployment
+- ✅ **App Hosting** - For automatic deployments
 - ✅ **Cloud Functions** - For backend API
 - ✅ **Cloud Storage** - For image uploads
 - ✅ **Upgrade to Blaze Plan** - Required for Cloud Functions (free tier: 2M invocations/month)
+
+### 2. Connect GitHub to Firebase App Hosting
+
+1. Go to [Firebase Console](https://console.firebase.google.com/) → ttb-label-checker
+2. Navigate to **App Hosting** in the sidebar
+3. Click **Get started**
+4. Connect your GitHub repository
+5. Configure automatic deployments from the `main` branch
 
 ### 3. Enable Google Cloud Vision API
 
@@ -99,12 +96,12 @@ firebase emulators:start --only functions
 
 ```bash
 git add .
-git commit -m "Initial Firebase setup with Next.js frontend and Python Cloud Functions
+git commit -m "Initial Firebase App Hosting setup with Next.js and Python
 
-- Configure Firebase hosting and functions
-- Set up Next.js 14 with TypeScript and Tailwind
-- Create Python Cloud Functions with uv
-- Add GitHub Actions for CI/CD
+- Configure Firebase App Hosting and Cloud Functions
+- Set up Next.js 14 with TypeScript and Tailwind (standalone mode)
+- Create Python 3.13 Cloud Functions with uv
+- Add GitHub Actions for CI (testing & linting)
 - Add comprehensive documentation"
 ```
 
@@ -118,7 +115,7 @@ git remote add origin <your-github-repo-url>
 git push -u origin main
 ```
 
-**Note**: Ensure you've added `FIREBASE_SERVICE_ACCOUNT` to GitHub Secrets before pushing, or the deployment workflow will fail.
+**Note**: Once you connect your GitHub repo to Firebase App Hosting, it will automatically deploy on every push to `main`.
 
 ---
 

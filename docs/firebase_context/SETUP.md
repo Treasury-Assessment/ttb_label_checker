@@ -1,37 +1,22 @@
 # Firebase and GitHub Actions Setup Guide
 
-This guide walks you through setting up Firebase and configuring GitHub Actions for continuous deployment.
+This guide walks you through setting up Firebase with automatic deployments via Firebase App Hosting.
 
 ## Prerequisites
 
 - ✅ Firebase CLI installed (`firebase --version` to verify)
 - ✅ Firebase project created: `ttb-label-checker`
 - ✅ Firebase CLI authenticated (`firebase login`)
-- ✅ GitHub repository created
+- ✅ GitHub repository created and connected to Firebase
 
-## Firebase Service Account Setup
+## Deployment Strategy
 
-To enable GitHub Actions to deploy to Firebase, you need to create a service account and add it as a GitHub secret.
+This project uses **Firebase App Hosting** for automatic deployments:
+- **Frontend**: Deployed via Firebase App Hosting (automatic on push to main)
+- **Backend**: Cloud Functions deployed with Firebase CLI or App Hosting
+- **CI/CD**: GitHub Actions runs tests and linting only (no deployment)
 
-### Step 1: Generate Firebase Service Account Key
-
-1. Go to the [Firebase Console](https://console.firebase.google.com/)
-2. Select your project: **ttb-label-checker**
-3. Click the gear icon ⚙️ → **Project settings**
-4. Navigate to the **Service accounts** tab
-5. Click **Generate new private key**
-6. Save the JSON file securely (DO NOT commit this file!)
-
-### Step 2: Add Service Account to GitHub Secrets
-
-1. Go to your GitHub repository
-2. Navigate to **Settings** → **Secrets and variables** → **Actions**
-3. Click **New repository secret**
-4. Name: `FIREBASE_SERVICE_ACCOUNT`
-5. Value: Copy and paste the **entire contents** of the service account JSON file
-6. Click **Add secret**
-
-### Step 3: Enable Required Firebase Services
+## Enable Required Firebase Services
 
 In the Firebase Console, enable the following services:
 
@@ -124,19 +109,19 @@ firebase emulators:start --only functions
 
 ## Deployment
 
-### Manual Deployment
+### Automatic Deployment (Firebase App Hosting)
 
-Deploy everything:
-```bash
-firebase deploy
-```
+Firebase App Hosting automatically deploys your application:
+- **Push to `main`**: Automatically deploys to production
+- **Pull Requests**: Automatically creates preview deployments
+- **No manual steps required** - Firebase handles builds and deployments
 
-Deploy only hosting:
-```bash
-firebase deploy --only hosting
-```
+The backend is integrated into App Hosting and deploys automatically with the frontend.
 
-Deploy only functions:
+### Manual Deployment (Optional)
+
+If needed, you can manually deploy functions:
+
 ```bash
 cd functions
 uv pip compile pyproject.toml -o requirements.txt
@@ -144,17 +129,16 @@ cd ..
 firebase deploy --only functions
 ```
 
-### Automatic Deployment (GitHub Actions)
+### GitHub Actions (CI Only)
 
-Automatic deployment is configured for:
-- **Push to `main`**: Deploys to production
-- **Pull Requests**: Creates preview deployments
+GitHub Actions runs on every push and pull request to:
+1. Lint frontend and backend code
+2. Run tests (when implemented)
+3. Type check TypeScript
+4. Build frontend to verify it compiles
+5. Verify requirements.txt is up to date
 
-The workflow will:
-1. Run tests on both frontend and functions
-2. Build the frontend
-3. Generate Python requirements
-4. Deploy to Firebase
+**Note**: GitHub Actions does NOT deploy - Firebase App Hosting handles all deployments automatically.
 
 ## Troubleshooting
 
@@ -166,9 +150,12 @@ The workflow will:
 
 **Solution**: Run `firebase login --reauth`
 
-### "GitHub Actions: FirebaseServiceAccount not found"
+### "GitHub Actions CI workflow fails"
 
-**Solution**: Verify you've added `FIREBASE_SERVICE_ACCOUNT` secret in GitHub repo settings.
+**Solution**: Check the workflow logs in GitHub Actions tab. Common issues:
+- Frontend build errors: Run `npm run build` locally to diagnose
+- Python dependency issues: Ensure `requirements.txt` is up to date with `uv pip compile`
+- Type errors: Run `npx tsc --noEmit` in frontend directory
 
 ### "Module not found" errors in Functions
 
@@ -181,14 +168,15 @@ firebase deploy --only functions
 
 ### Functions deployment fails with Python version error
 
-**Solution**: Ensure `functions/.python-version` contains `3.11` and `firebase.json` specifies `"runtime": "python311"`
+**Solution**: Ensure `functions/.python-version` contains `3.13` and `firebase.json` specifies `"runtime": "python313"`
 
 ## Next Steps
 
-1. ✅ Set up Firebase service account in GitHub secrets
-2. ✅ Enable required Firebase services
+1. ✅ Enable required Firebase services (App Hosting, Functions, Storage)
+2. ✅ Connect GitHub repository to Firebase App Hosting
 3. ✅ Add environment variables to `frontend/.env.local`
-4. 🚀 Start building the application!
+4. ✅ Enable Google Cloud Vision API
+5. 🚀 Start building the application!
 
 ## Useful Commands
 
@@ -211,6 +199,7 @@ firebase emulators:start
 
 ## Resources
 
+- [Firebase App Hosting Documentation](https://firebase.google.com/docs/app-hosting)
 - [Firebase Documentation](https://firebase.google.com/docs)
 - [Next.js Documentation](https://nextjs.org/docs)
 - [GitHub Actions Documentation](https://docs.github.com/en/actions)

@@ -7,15 +7,11 @@ Use this checklist to ensure proper Firebase setup and deployment.
 ### Firebase Console Configuration
 - [ ] Firebase project created: `ttb-label-checker`
 - [ ] Billing upgraded to **Blaze (Pay as you go)** plan
-- [ ] **Hosting** enabled
-- [ ] **Cloud Functions** enabled  
+- [ ] **App Hosting** enabled
+- [ ] **Cloud Functions** enabled
 - [ ] **Cloud Storage** enabled and rules configured
 - [ ] **Google Cloud Vision API** enabled in Google Cloud Console
-
-### Service Account & Secrets
-- [ ] Firebase service account JSON generated
-- [ ] `FIREBASE_SERVICE_ACCOUNT` added to GitHub repository secrets
-- [ ] Service account has required permissions
+- [ ] GitHub repository connected to Firebase App Hosting
 
 ### Environment Variables
 - [ ] `frontend/.env.local` created from `.env.local.example`
@@ -48,7 +44,7 @@ Use this checklist to ensure proper Firebase setup and deployment.
 ### Repository Configuration
 - [ ] GitHub repository created
 - [ ] Remote added (`git remote add origin <url>`)
-- [ ] `FIREBASE_SERVICE_ACCOUNT` secret added to GitHub
+- [ ] Repository connected to Firebase App Hosting
 - [ ] Branch protection rules configured (optional)
 
 ### Initial Commit
@@ -57,17 +53,19 @@ Use this checklist to ensure proper Firebase setup and deployment.
 - [ ] Changes pushed to `main` branch
 
 ### CI/CD Verification
-- [ ] GitHub Actions workflow triggered on push
-- [ ] CI workflow passes (lint + test)
-- [ ] Deployment workflow succeeds
-- [ ] Firebase hosting URL accessible
+- [ ] GitHub Actions CI workflow triggered on push
+- [ ] CI workflow passes (lint + test + build)
+- [ ] Firebase App Hosting automatically deploys
+- [ ] App Hosting URL accessible
 
 ## ☐ Firebase Services Verification
 
-### Hosting
-- [ ] Site URL accessible: `https://ttb-label-checker.web.app`
+### App Hosting
+- [ ] App deployed successfully via App Hosting
+- [ ] Site URL accessible
 - [ ] Landing page displays correctly
 - [ ] SSL certificate active
+- [ ] Preview deployments work for PRs
 
 ### Cloud Functions
 - [ ] Function deployed successfully
@@ -141,19 +139,24 @@ Use this checklist to ensure proper Firebase setup and deployment.
 
 ## Quick Reference Commands
 
-### Deploy Everything
+### Automatic Deployment (Recommended)
 ```bash
-firebase deploy
+git push origin main
+# Firebase App Hosting automatically deploys!
 ```
 
-### Deploy Hosting Only
-```bash
-cd frontend && npm run build && cd .. && firebase deploy --only hosting
-```
-
-### Deploy Functions Only
+### Manual Deploy Functions Only (if needed)
 ```bash
 cd functions && uv pip compile pyproject.toml -o requirements.txt && cd .. && firebase deploy --only functions
+```
+
+### Local Development
+```bash
+# Frontend
+cd frontend && npm run dev
+
+# Run all emulators
+firebase emulators:start
 ```
 
 ### View Logs
@@ -161,32 +164,42 @@ cd functions && uv pip compile pyproject.toml -o requirements.txt && cd .. && fi
 firebase functions:log
 ```
 
-### Run Emulators
+### Run CI Checks Locally
 ```bash
-firebase emulators:start
+# Frontend
+cd frontend
+npm run lint
+npm run build
+npx tsc --noEmit
+
+# Backend
+cd functions
+source .venv/bin/activate
+ruff check .
+pytest
 ```
 
 ---
 
 ## Troubleshooting
 
-### Deployment Fails
-1. Check Firebase CLI is authenticated: `firebase login:list`
-2. Verify project ID in `.firebaserc` matches console
+### App Hosting Deployment Fails
+1. Check Firebase App Hosting build logs in Firebase Console
+2. Verify GitHub repository is properly connected
 3. Ensure Blaze plan is active
-4. Check GitHub Actions logs for errors
+4. Check that `next.config.js` uses `standalone` output mode
 
 ### Function Errors
 1. View logs: `firebase functions:log`
 2. Test locally: `firebase emulators:start --only functions`
-3. Verify requirements.txt is up to date
-4. Check Python version matches runtime
+3. Verify requirements.txt is up to date: `uv pip compile pyproject.toml -o requirements.txt`
+4. Check Python version is 3.13
 
-### CI/CD Fails
-1. Verify `FIREBASE_SERVICE_ACCOUNT` secret exists
-2. Check workflow file syntax
-3. Review GitHub Actions logs
-4. Ensure all tests pass locally
+### CI Workflow Fails
+1. Check workflow file syntax in `.github/workflows/ci.yml`
+2. Review GitHub Actions logs for specific errors
+3. Ensure all tests pass locally before pushing
+4. Verify requirements.txt is committed and up to date
 
 ---
 

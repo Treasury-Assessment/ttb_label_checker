@@ -12,7 +12,7 @@ on:
 
 env:
   NODE_VERSION: '20'
-  PYTHON_VERSION: '3.11'
+  PYTHON_VERSION: '3.13'
 
 jobs:
   lint-and-test:
@@ -73,3 +73,18 @@ jobs:
       - name: Type check frontend
         working-directory: ./frontend
         run: npm run type-check --if-present || npx tsc --noEmit || echo "Type checking not configured"
+
+      - name: Build frontend
+        working-directory: ./frontend
+        run: npm run build
+
+      - name: Generate requirements.txt
+        working-directory: ./functions
+        run: |
+          source .venv/bin/activate
+          uv pip compile pyproject.toml -o requirements.txt
+
+      - name: Verify requirements.txt is up to date
+        working-directory: ./functions
+        run: |
+          git diff --exit-code requirements.txt || (echo "requirements.txt is out of date. Run: cd functions && uv pip compile pyproject.toml -o requirements.txt" && exit 1)
