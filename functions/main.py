@@ -11,10 +11,7 @@ import json
 initialize_app()
 
 
-@https_fn.on_request(cors=https_fn.CorsOptions(
-    cors_origins="*",
-    cors_methods=["POST", "OPTIONS"]
-))
+@https_fn.on_request(cors=True, region="us-east4")
 def verify_label(req: https_fn.Request) -> https_fn.Response:
     """
     Cloud Function to verify alcohol label against TTB requirements.

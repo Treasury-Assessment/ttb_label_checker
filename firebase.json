@@ -15,9 +15,31 @@
   },
   "functions": [
     {
-      "source": "functions",
       "codebase": "default",
-      "runtime": "python311"
+      "source": "functions",
+      "runtime": "python311",
+      "region": "us-east4",
+      "ignore": [
+        "venv",
+        ".venv",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
     }
-  ]
+  ],
+  "apphosting": {
+    "backendId": "ttb-label-checker-backend",
+    "rootDir": "frontend",
+    "ignore": [
+      "node_modules",
+      ".git",
+      "firebase-debug.log",
+      "firebase-debug.*.log"
+    ]
+  },
+  "storage": {
+    "rules": "storage.rules"
+  }
 }

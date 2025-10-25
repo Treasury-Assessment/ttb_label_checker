@@ -30,7 +30,7 @@ This system provides a simplified compliance pre-check for alcohol beverage labe
 - **Framer Motion** for animations
 
 ### Backend
-- **Firebase Cloud Functions** (Python 3.11)
+- **Firebase Cloud Functions** (Python 3.13)
 - **Google Cloud Vision API** for OCR
 - **uv** package manager
 - **Firebase Storage** for temporary image storage
