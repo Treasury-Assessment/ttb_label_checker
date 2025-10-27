@@ -99,15 +99,80 @@ source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 uv pip install -e .
 ```
 
-### 2. Configure Environment
+### 2. Configure Environment Variables
 
-Copy `.env.local.example` to `.env.local` in the frontend directory and fill in your Firebase configuration:
+#### Frontend Environment (.env.local)
+
+Copy `.env.local.example` to `.env.local` in the frontend directory:
 
 ```bash
 cd frontend
 cp .env.local.example .env.local
-# Edit .env.local with your Firebase credentials
 ```
+
+Edit `.env.local` with your Firebase configuration:
+
+```bash
+# Firebase Configuration (Get these from Firebase Console > Project Settings)
+NEXT_PUBLIC_FIREBASE_API_KEY=your-api-key-here
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=ttb-label-checker.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=ttb-label-checker
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=ttb-label-checker.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
+NEXT_PUBLIC_FIREBASE_APP_ID=your-app-id
+
+# API Endpoint (Development: use emulator, Production: use Cloud Functions URL)
+NEXT_PUBLIC_API_URL=http://localhost:5001/ttb-label-checker/us-central1
+# Production: NEXT_PUBLIC_API_URL=https://us-central1-ttb-label-checker.cloudfunctions.net
+```
+
+#### Backend Environment (.env)
+
+Copy `.env.example` to `.env` in the functions directory:
+
+```bash
+cd functions
+cp .env.example .env
+```
+
+Edit `.env` with your configuration:
+
+```bash
+# Google Cloud Project
+GOOGLE_CLOUD_PROJECT_ID=ttb-label-checker
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
+
+# Firebase
+FIREBASE_STORAGE_BUCKET=ttb-label-checker.appspot.com
+
+# OCR Configuration
+OCR_CONFIDENCE_THRESHOLD=0.7
+```
+
+**Important Security Notes:**
+- ✅ `.env.local.example` and `.env.example` are committed to git (templates only)
+- ❌ `.env.local` and `.env` are in `.gitignore` (NEVER commit these)
+- ❌ Service account JSON files are in `.gitignore` (NEVER commit these)
+- 🔐 For production, use [Firebase Secrets](https://firebase.google.com/docs/functions/config-env#secret-manager) instead of .env files
+
+#### Getting Firebase Credentials
+
+1. **Firebase Configuration** (for frontend):
+   - Go to [Firebase Console](https://console.firebase.google.com/)
+   - Select your project → Settings (⚙️) → General
+   - Scroll to "Your apps" → Web app → Copy configuration values
+
+2. **Service Account** (for backend):
+   - Go to [Firebase Console](https://console.firebase.google.com/)
+   - Select your project → Settings (⚙️) → Service Accounts
+   - Click "Generate new private key"
+   - Save as `service-account.json` in functions directory (it's gitignored)
+   - Set `GOOGLE_APPLICATION_CREDENTIALS` to the full path
+
+3. **Enable APIs**:
+   - Cloud Vision API: [Enable here](https://console.cloud.google.com/apis/library/vision.googleapis.com)
+   - Cloud Functions: Enabled automatically with Firebase
+   - Cloud Storage: Enabled automatically with Firebase
 
 ### 3. Run Locally
 
