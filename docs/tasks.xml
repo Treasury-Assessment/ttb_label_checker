@@ -1,0 +1,1455 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project name="TTB Label Verification System">
+  <metadata>
+    <title>TTB Label Verification System - Implementation Tasks</title>
+    <description>AI-powered web application for verifying alcohol beverage labels against TTB regulatory requirements</description>
+    <created>2025-10-25</created>
+    <last_updated>2025-10-25</last_updated>
+    <status>In Development - Phase 1</status>
+    <version>1.0</version>
+    <reference>docs/prd.md</reference>
+  </metadata>
+
+  <!-- PHASE 1: CORE INFRASTRUCTURE & SETUP -->
+  <phase id="1" name="Core Infrastructure & Setup" priority="critical">
+    <description>
+      Set up foundational infrastructure, environment variables, and Firebase services.
+      This phase must be completed before any feature development.
+    </description>
+
+    <task id="1.1" priority="critical" estimated_hours="1" status="completed">
+      <title>Enable Firebase Services</title>
+      <description>
+        Enable required Firebase services in the Firebase Console for the ttb-label-checker project.
+      </description>
+      <acceptance_criteria>
+        - Firebase App Hosting enabled for automatic deployments
+        - Cloud Functions (2nd gen) enabled with Python 3.11 runtime
+        - Cloud Storage enabled for temporary image storage
+        - Blaze (Pay-as-you-go) plan activated for Cloud Functions
+      </acceptance_criteria>
+      <dependencies>None</dependencies>
+      <reference>PRD Section 5.4, NEXT_STEPS.md</reference>
+    </task>
+
+    <task id="1.2" priority="critical" estimated_hours="0.5" status="completed">
+      <title>Enable Google Cloud Vision API</title>
+      <description>
+        Enable Google Cloud Vision API in the Google Cloud Console for OCR functionality.
+      </description>
+      <acceptance_criteria>
+        - Cloud Vision API enabled in Google Cloud Console
+        - API quota limits verified (free tier: 1000 requests/month)
+        - Service account has Vision API access permissions
+      </acceptance_criteria>
+      <dependencies>1.1</dependencies>
+      <reference>PRD Section 3.3.1, Section 5.3</reference>
+    </task>
+
+    <task id="1.3" priority="critical" estimated_hours="0.5" status="completed">
+      <title>Configure Firebase Storage Security Rules</title>
+      <description>
+        Set up Firebase Storage security rules for temporary image uploads with 24h lifecycle.
+      </description>
+      <acceptance_criteria>
+        - storage.rules file updated with label-uploads path rules
+        - Public upload allowed with 10MB size limit and image/* MIME type restriction
+        - Lifecycle policy configured for auto-deletion after 24 hours
+        - Rules deployed to Firebase Storage
+      </acceptance_criteria>
+      <dependencies>1.1</dependencies>
+      <reference>PRD Section 5.4 - Firebase Security Rules</reference>
+      <implementation>
+        File: storage.rules
+        Rules:
+        - Allow write if: request.resource.size &lt; 10MB AND contentType matches 'image/*'
+        - Allow read: public (temp only)
+        - Lifecycle: Delete after 24 hours
+      </implementation>
+    </task>
+
+    <task id="1.4" priority="critical" estimated_hours="0.5">
+      <title>Create Environment Variables Configuration</title>
+      <description>
+        Set up environment variables for both frontend and backend with proper security.
+      </description>
+      <acceptance_criteria>
+        - frontend/.env.local.example created with all required variables
+        - functions/.env.example created for backend variables
+        - Environment variables documented in README
+        - Service account JSON added to .gitignore
+        - Firebase secrets configured for production (firebase functions:secrets:set)
+      </acceptance_criteria>
+      <dependencies>1.1, 1.2</dependencies>
+      <reference>PRD Section 5.4 - Environment Variables</reference>
+      <implementation>
+        Frontend (.env.local):
+        - NEXT_PUBLIC_API_URL (Cloud Function endpoint)
+        - NEXT_PUBLIC_FIREBASE_API_KEY
+        - NEXT_PUBLIC_FIREBASE_PROJECT_ID
+        - NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+
+        Backend (.env or Firebase Secrets):
+        - GOOGLE_CLOUD_PROJECT_ID=ttb-label-checker
+        - GOOGLE_APPLICATION_CREDENTIALS (service account path)
+        - FIREBASE_STORAGE_BUCKET=ttb-label-checker.appspot.com
+        - OCR_CONFIDENCE_THRESHOLD=0.7
+      </implementation>
+    </task>
+
+    <task id="1.5" priority="high" estimated_hours="0.5" status="completed">
+      <title>Connect GitHub to Firebase App Hosting</title>
+      <description>
+        Connect the GitHub repository to Firebase App Hosting for automatic CI/CD deployments.
+      </description>
+      <acceptance_criteria>
+        - GitHub repository connected to Firebase App Hosting
+        - Automatic deployments configured for 'main' branch
+        - Build configuration verified (apphosting.yaml)
+        - Test deployment successful
+      </acceptance_criteria>
+      <dependencies>1.1</dependencies>
+      <reference>NEXT_STEPS.md Section 2</reference>
+    </task>
+
+    <task id="1.6" priority="medium" estimated_hours="0.5">
+      <title>Add Sample Label Images</title>
+      <description>
+        Collect and add sample alcohol label images for testing across all product types.
+      </description>
+      <acceptance_criteria>
+        - 5-10 sample label images added to docs/sample-labels/
+        - Include: bourbon-whiskey, beer-ipa, red-wine, vodka, intentional-mismatch
+        - Images are clear, high-resolution (min 800x600px)
+        - Government warning text clearly visible on all labels
+        - Metadata file created describing each label's expected values
+      </acceptance_criteria>
+      <dependencies>None</dependencies>
+      <reference>PRD Section 17.3, Section 8.1 Test Cases</reference>
+    </task>
+  </phase>
+
+  <!-- PHASE 2: BACKEND IMPLEMENTATION (Python Cloud Functions) -->
+  <phase id="2" name="Backend Implementation" priority="critical">
+    <description>
+      Implement core backend functionality including data models, OCR processing,
+      and verification logic with TTB compliance rules.
+    </description>
+
+    <task id="2.1" priority="critical" estimated_hours="2">
+      <title>Implement Python Data Models (models.py)</title>
+      <description>
+        Create Python dataclasses for all data structures used in the backend.
+      </description>
+      <acceptance_criteria>
+        - ProductType enum (SPIRITS, WINE, BEER)
+        - FormData dataclass with all fields from PRD Section 6.2
+        - BoundingBox dataclass for OCR text locations
+        - FieldResult dataclass for individual field verification
+        - VerificationResult dataclass for complete response
+        - All classes have proper type hints and docstrings
+        - Optional fields use Optional[T] type annotation
+      </acceptance_criteria>
+      <dependencies>None</dependencies>
+      <reference>PRD Section 6.2 - Backend Models</reference>
+      <implementation>
+        File: functions/models.py
+        Classes:
+        - ProductType(Enum): spirits, wine, beer
+        - FormData: All form fields with product-specific optionals
+        - BoundingBox: x, y, width, height
+        - FieldResult: field_name, status, expected, found, confidence, location
+        - VerificationResult: overall_match, confidence_score, field_results, ocr_full_text, processing_time_ms
+      </implementation>
+    </task>
+
+    <task id="2.2" priority="critical" estimated_hours="4">
+      <title>Implement OCR Processing Module (ocr.py)</title>
+      <description>
+        Create OCR module using Google Cloud Vision API for text extraction from label images.
+      </description>
+      <acceptance_criteria>
+        - Function to decode base64 image and validate format (JPEG, PNG, WebP)
+        - Integration with Google Cloud Vision API (TEXT_DETECTION feature)
+        - Text extraction with bounding box coordinates for each text block
+        - Text normalization function (lowercase, strip punctuation, whitespace)
+        - Common OCR error correction (0/O, 1/l/I, 5/S)
+        - Function returns structured OCR data with full text and text blocks
+        - Error handling for invalid images, API failures
+        - Fallback to Tesseract OCR if Vision API fails (optional for MVP)
+        - Confidence threshold check (warn if &lt; 70%)
+      </acceptance_criteria>
+      <dependencies>1.2, 2.1</dependencies>
+      <reference>PRD Section 3.3 - Backend OCR &amp; Processing Module</reference>
+      <implementation>
+        File: functions/ocr.py
+
+        Key functions:
+        - validate_and_decode_image(base64_str) -&gt; PIL.Image
+        - preprocess_image(image) -&gt; PIL.Image (resize, contrast, grayscale)
+        - extract_text_vision_api(image) -&gt; OCRResult
+        - normalize_text(text) -&gt; str
+        - correct_ocr_errors(text) -&gt; str
+
+        OCRResult dataclass:
+        - full_text: str
+        - text_blocks: list[TextBlock]
+        - confidence: float
+
+        TextBlock:
+        - text: str
+        - bounding_box: BoundingBox
+        - confidence: float
+      </implementation>
+    </task>
+
+    <task id="2.3" priority="critical" estimated_hours="8">
+      <title>Implement Core Verification Logic (verification.py)</title>
+      <description>
+        Create verification module with field-by-field comparison and TTB compliance rules.
+        This is the most complex backend task.
+      </description>
+      <acceptance_criteria>
+        - Main verify_label() function that orchestrates all checks
+        - Brand name verification with fuzzy matching (85% threshold)
+        - Product class/type verification with keyword matching and synonyms
+        - Alcohol content (ABV) verification with regex and ±0.5% tolerance
+        - Net contents verification with:
+          * Multi-unit support (ml, L, fl oz, quarts, pints, gallons)
+          * Unit conversion to ml for standardized comparison
+          * Product-type-specific standards of fill validation:
+            - SPIRITS: Check against 25 approved sizes (27 CFR 5.47a), warn if non-standard
+            - WINE: Check against 25 approved sizes (27 CFR 4.71), warn if non-standard
+            - BEER: NO standards of fill check (27 CFR 7.70) - any size valid
+          * Warning (not fail) for non-standard sizes in spirits/wine only
+        - Government warning verification with 95% fuzzy match
+        - Each verification returns FieldResult with status, confidence, location
+        - Overall confidence score calculation
+        - Processing time tracking
+        - Error handling for edge cases
+      </acceptance_criteria>
+      <dependencies>2.1, 2.2</dependencies>
+      <reference>
+        PRD Section 3.4.1 - Field-by-Field Comparison Rules
+        PRD Section 3.4.1 - Net Contents with Standards of Fill
+        ENHANCED: Product-specific standards (27 CFR 5.47a for spirits, 27 CFR 4.71 for wine)
+      </reference>
+      <implementation>
+        File: functions/verification.py
+
+        Key functions:
+        - verify_label(form_data: FormData, ocr_result: OCRResult) -&gt; VerificationResult
+        - verify_brand_name(expected, ocr_text, ocr_blocks) -&gt; FieldResult
+        - verify_product_class(expected, ocr_text, ocr_blocks) -&gt; FieldResult
+        - verify_alcohol_content(expected, ocr_text, ocr_blocks) -&gt; FieldResult
+        - verify_net_contents(expected, ocr_text, ocr_blocks, product_type) -&gt; FieldResult
+        - verify_government_warning(ocr_text, ocr_blocks) -&gt; FieldResult
+        - fuzzy_match(str1, str2, threshold) -&gt; float
+        - extract_abv_from_text(text) -&gt; float | None
+        - extract_volume_from_text(text) -&gt; tuple[float, str] | None
+        - convert_volume_to_ml(value: float, unit: str) -&gt; float
+        - is_standard_size(volume_ml: float, product_type: ProductType) -&gt; bool
+
+        Constants (Standards of Fill):
+        - GOVERNMENT_WARNING_TEXT (exact required text from 27 CFR Part 16)
+
+        # 27 CFR 5.47a - Distilled Spirits Standard Sizes (in ml)
+        # Complete list of approved standard sizes for distilled spirits
+        - SPIRITS_STANDARD_SIZES_ML = [
+            3750,  # (1) 3.75 Liters
+            3000,  # (2) 3 Liters
+            2000,  # (3) 2 Liters
+            1800,  # (4) 1.8 Liters
+            1750,  # (5) 1.75 Liters
+            1500,  # (6) 1.5 Liters
+            1000,  # (7) 1.00 Liter
+            945,   # (8) 945 mL
+            900,   # (9) 900 mL
+            750,   # (10) 750 mL (standard bottle)
+            720,   # (11) 720 mL
+            710,   # (12) 710 mL
+            700,   # (13) 700 mL
+            570,   # (14) 570 mL
+            500,   # (15) 500 mL
+            475,   # (16) 475 mL
+            375,   # (17) 375 mL (half bottle)
+            355,   # (18) 355 mL
+            350,   # (19) 350 mL
+            331,   # (20) 331 mL
+            250,   # (21) 250 mL
+            200,   # (22) 200 mL
+            187,   # (23) 187 mL
+            100,   # (24) 100 mL
+            50     # (25) 50 mL (miniature)
+          ]
+
+        # 27 CFR 4.71 - Wine Standard Sizes (in ml)
+        # Complete list of approved standard sizes for wine
+        - WINE_STANDARD_SIZES_ML = [
+            3000,  # (1) 3 liters
+            2250,  # (2) 2.25 liters
+            1800,  # (3) 1.8 liters
+            1500,  # (4) 1.5 liters (magnum)
+            1000,  # (5) 1 liter
+            750,   # (6) 750 milliliters (standard bottle)
+            720,   # (7) 720 milliliters
+            700,   # (8) 700 milliliters
+            620,   # (9) 620 milliliters
+            600,   # (10) 600 milliliters
+            568,   # (11) 568 milliliters
+            550,   # (12) 550 milliliters
+            500,   # (13) 500 milliliters
+            473,   # (14) 473 milliliters
+            375,   # (15) 375 milliliters (half bottle/demi)
+            360,   # (16) 360 milliliters
+            355,   # (17) 355 milliliters
+            330,   # (18) 330 milliliters
+            300,   # (19) 300 milliliters
+            250,   # (20) 250 milliliters
+            200,   # (21) 200 milliliters
+            187,   # (22) 187 milliliters (split/piccolo)
+            180,   # (23) 180 milliliters
+            100,   # (24) 100 milliliters
+            50     # (25) 50 milliliters
+          ]
+
+        # 27 CFR 7.70 (formerly 7.22(a)(4)) - Beer/Malt Beverage Net Contents
+        # IMPORTANT: Beer/malt beverages have NO standards of fill under TTB regulations
+        # Unlike wine and spirits, beer can be sold in ANY container size
+        # Only requirement: net contents must be properly labeled in U.S. standard measures
+        #
+        # For verification purposes:
+        # - Verify volume matches between label and form data
+        # - DO NOT check against standard sizes (none exist for beer)
+        # - Accept any container size as valid
+        # - Only verify labeling format compliance (fluid ounces, pints, quarts, gallons)
+        #
+        # Note: Common industry sizes exist (12oz, 16oz, etc.) but are NOT regulatory requirements
+
+        # Unit conversion factors to ml
+        - UNIT_CONVERSIONS = {
+            'ml': 1.0,
+            'milliliter': 1.0,
+            'milliliters': 1.0,
+            'l': 1000.0,
+            'liter': 1000.0,
+            'liters': 1000.0,
+            'fl oz': 29.5735,
+            'oz': 29.5735,
+            'ounce': 29.5735,
+            'ounces': 29.5735,
+            'pt': 473.176,
+            'pint': 473.176,
+            'pints': 473.176,
+            'qt': 946.353,
+            'quart': 946.353,
+            'quarts': 946.353,
+            'gal': 3785.41,
+            'gallon': 3785.41,
+            'gallons': 3785.41
+          }
+
+        Implementation Logic for Net Contents Verification:
+        1. Extract volume and unit from OCR text (e.g., "750 mL", "1 liter", "25.4 fl oz", "12 fl oz")
+        2. Convert extracted volume to ml using UNIT_CONVERSIONS
+        3. Convert form data volume to ml (if different unit)
+        4. Compare converted values (exact match required, ±1ml tolerance for rounding)
+        5. Check if volume matches product-type-specific standard sizes:
+           - SPIRITS: Check against SPIRITS_STANDARD_SIZES_ML (27 CFR 5.47a)
+             * If non-standard: Return "match" with WARNING note
+             * Example: "Volume matches (355ml) but non-standard for spirits"
+           - WINE: Check against WINE_STANDARD_SIZES_ML (27 CFR 4.71)
+             * If non-standard: Return "match" with WARNING note
+             * Example: "Volume matches (1750ml) but non-standard for wine"
+           - BEER: NO standards of fill check (27 CFR 7.70)
+             * Any container size is valid per TTB regulations
+             * Only verify volume matches between label and form
+             * No warnings for "non-standard" sizes (concept doesn't apply)
+        6. Document CFR references in code comments for each verification path
+      </implementation>
+    </task>
+
+    <task id="2.4" priority="high" estimated_hours="6">
+      <title>Implement Product-Specific Compliance Rules</title>
+      <description>
+        Add conditional verification logic for spirits, wine, and beer product types
+        as specified in TTB regulations.
+      </description>
+      <acceptance_criteria>
+        SPIRITS:
+        - Age statement verification (conditional: whisky &lt;4 years, brandy &lt;2 years)
+        - Age format validation against approved TTB formats
+        - Proof verification (optional, Proof = ABV × 2, ±1 tolerance)
+        - State of distillation check (conditional)
+        - Commodity statement check (conditional)
+
+        WINE:
+        - Vintage year verification (if specified)
+        - Sulfite declaration check (if contains_sulfites = true)
+        - Appellation verification (bonus feature)
+
+        BEER:
+        - "Malt Beverage" synonym acceptance for "Beer"
+        - ABV optional handling
+        - Non-alcoholic labeling (&lt;0.5% ABV)
+
+        - All rules reference specific 27 CFR sections in code comments
+        - Conditional fields only checked when conditions met
+        - Warnings vs. failures distinguished (e.g., non-standard sizes = warning)
+      </acceptance_criteria>
+      <dependencies>2.3</dependencies>
+      <reference>PRD Section 3.4.3 - Compliance Rule Engine</reference>
+      <implementation>
+        File: functions/verification.py (extend with product-specific functions)
+
+        New functions:
+        - verify_age_statement(form_data, ocr_text, ocr_blocks) -&gt; FieldResult
+        - verify_proof(form_data, ocr_text, ocr_blocks) -&gt; FieldResult
+        - verify_sulfite_declaration(form_data, ocr_text, ocr_blocks) -&gt; FieldResult
+        - verify_vintage(form_data, ocr_text, ocr_blocks) -&gt; FieldResult
+        - is_age_statement_required(product_class, form_data) -&gt; bool
+        - validate_age_format(age_text) -&gt; bool
+
+        Reference CFR sections:
+        - 27 CFR 5.74 (Age Statement)
+        - 27 CFR 5.65 (Proof)
+        - 27 CFR 5.63(c)(7) (Sulfites)
+        - 27 CFR 5.203 (Standards of Fill)
+      </implementation>
+    </task>
+
+    <task id="2.5" priority="high" estimated_hours="2">
+      <title>Integrate Verification Logic into Cloud Function</title>
+      <description>
+        Connect all backend modules in main.py to create complete verification flow.
+      </description>
+      <acceptance_criteria>
+        - Import all modules (models, ocr, verification)
+        - Replace placeholder response with actual OCR and verification calls
+        - Add error handling for each stage (image validation, OCR, verification)
+        - Implement processing time tracking
+        - Add structured logging for debugging
+        - Return proper error codes for different failure types
+        - Test with sample images and form data
+      </acceptance_criteria>
+      <dependencies>2.1, 2.2, 2.3, 2.4</dependencies>
+      <reference>PRD Section 5.5 - API Design</reference>
+      <implementation>
+        File: functions/main.py
+
+        Flow:
+        1. Validate request (product_type, form_data, image)
+        2. Decode and validate image (ocr.validate_and_decode_image)
+        3. Upload to Firebase Storage (temp, optional for MVP)
+        4. Extract text via OCR (ocr.extract_text_vision_api)
+        5. Run verification (verification.verify_label)
+        6. Return structured response with all results
+
+        Error handling:
+        - INVALID_IMAGE: Unsupported format, corrupt file
+        - OCR_FAILED: Vision API error, low confidence
+        - INVALID_INPUT: Missing/invalid form fields
+        - INTERNAL_ERROR: Unexpected exceptions
+      </implementation>
+    </task>
+
+    <task id="2.6" priority="medium" estimated_hours="2">
+      <title>Add Compliance Scoring Algorithm</title>
+      <description>
+        Implement weighted scoring system for overall compliance assessment.
+      </description>
+      <acceptance_criteria>
+        - calculate_compliance_score() function implemented
+        - Weighted scoring: Brand/ABV/Class/Warning = 40 pts, Net Contents/Sulfites = 20 pts, Others = 10 pts
+        - Returns score, max_score, percentage, grade (A/B/C/D/F)
+        - Grade thresholds: A (90-100%), B (80-89%), C (70-79%), D (60-69%), F (&lt;60%)
+        - Integrated into VerificationResult
+      </acceptance_criteria>
+      <dependencies>2.3</dependencies>
+      <reference>PRD Section 10.3 - Compliance Scoring</reference>
+    </task>
+  </phase>
+
+  <!-- PHASE 3: FRONTEND COMPONENTS -->
+  <phase id="3" name="Frontend Components" priority="critical">
+    <description>
+      Build interactive React components for the user interface including form inputs,
+      image upload, and results display with visual highlighting.
+    </description>
+
+    <task id="3.1" priority="high" estimated_hours="1">
+      <title>Create Frontend Validation Schemas (validation.ts)</title>
+      <description>
+        Define Zod schemas for type-safe form validation with product-specific rules.
+      </description>
+      <acceptance_criteria>
+        - Base form schema with required fields (brand_name, product_class, alcohol_content)
+        - Product-type specific schemas (spiritsFormSchema, wineFormSchema, beerFormSchema)
+        - Dynamic schema selection based on product_type
+        - Validation rules match PRD requirements
+        - Error messages are user-friendly
+        - Export zodResolver for react-hook-form integration
+      </acceptance_criteria>
+      <dependencies>None</dependencies>
+      <reference>PRD Section 3.1 - Form Input Module</reference>
+      <implementation>
+        File: frontend/src/lib/validation.ts
+
+        Schemas:
+        - baseFormSchema (common fields)
+        - spiritsFormSchema extends base (age_statement, proof, state_of_distillation)
+        - wineFormSchema extends base (vintage, contains_sulfites, appellation)
+        - beerFormSchema extends base (style)
+
+        Validation rules:
+        - brand_name: min 2, max 100 chars
+        - alcohol_content: 0-100, number
+        - net_contents: optional, regex for volume format
+        - age_statement: conditional required if whisky &lt;4 years
+        - contains_sulfites: boolean for wine
+      </implementation>
+    </task>
+
+    <task id="3.2" priority="high" estimated_hours="1">
+      <title>Create API Client Utility (api.ts)</title>
+      <description>
+        Create axios-based API client for communicating with Cloud Functions backend.
+      </description>
+      <acceptance_criteria>
+        - Axios instance configured with base URL from env
+        - verifyLabel() function with proper TypeScript types
+        - Request/response transformation
+        - Error handling and retry logic (3 retries with exponential backoff)
+        - Timeout configuration (30 seconds for OCR processing)
+        - CORS headers configuration
+        - Loading state management helper
+      </acceptance_criteria>
+      <dependencies>None</dependencies>
+      <reference>PRD Section 5.5 - API Design</reference>
+      <implementation>
+        File: frontend/src/lib/api.ts
+
+        Functions:
+        - createApiClient() -&gt; AxiosInstance
+        - verifyLabel(request: VerificationRequest) -&gt; Promise&lt;VerificationResponse&gt;
+        - convertImageToBase64(file: File) -&gt; Promise&lt;string&gt;
+
+        Error handling:
+        - Network errors
+        - API errors (4xx, 5xx)
+        - Timeout errors
+        - Validation errors
+      </implementation>
+    </task>
+
+    <task id="3.3" priority="critical" estimated_hours="4">
+      <title>Build Product Information Form Component (Form.tsx)</title>
+      <description>
+        Create dynamic form component that adapts fields based on product type selection.
+      </description>
+      <acceptance_criteria>
+        - Product type selector (spirits, wine, beer) as first field
+        - Dynamic field visibility based on product type
+        - React Hook Form integration with Zod validation
+        - Real-time validation with inline error messages
+        - Auto-save to localStorage (prevent data loss)
+        - Clear/reset functionality
+        - Form state persistence across page refreshes
+        - Responsive design (mobile, tablet, desktop)
+        - Accessibility: keyboard navigation, ARIA labels, screen reader support
+        - Loading states during submission
+      </acceptance_criteria>
+      <dependencies>3.1</dependencies>
+      <reference>PRD Section 3.1 - Form Input Module, Section 7.1 - UI Design</reference>
+      <implementation>
+        File: frontend/src/components/Form.tsx
+
+        Structure:
+        1. Product Type Selector (dropdown/radio)
+        2. Required Fields (always visible):
+           - Brand Name (text input)
+           - Product Class/Type (text input or dropdown)
+           - Alcohol Content (number input, % symbol)
+        3. Optional Fields:
+           - Net Contents (dropdown: 50ml, 100ml, 200ml, 375ml, 500ml, 750ml, 1L, 1.75L)
+           - Bottler Name (text input)
+           - Address (text input)
+           - Country of Origin (dropdown, conditional on is_imported)
+        4. Product-Specific Fields (conditionally rendered):
+           SPIRITS:
+           - Age Statement (text, conditional helper text)
+           - Proof (number, auto-calculated from ABV × 2)
+           - State of Distillation (text)
+
+           WINE:
+           - Vintage Year (number, 4 digits)
+           - Contains Sulfites (checkbox with tooltip)
+           - Appellation (text)
+
+           BEER:
+           - Style (text/dropdown: IPA, Lager, Stout, etc.)
+
+        Features:
+        - useForm from react-hook-form
+        - zodResolver for validation
+        - useLocalStorage hook for persistence
+        - Error display below each field
+        - Submit button disabled while invalid
+        - Loading spinner on submit
+      </implementation>
+    </task>
+
+    <task id="3.4" priority="critical" estimated_hours="3">
+      <title>Build Image Upload Component (ImageUpload.tsx)</title>
+      <description>
+        Create drag-and-drop image upload component with preview and validation.
+      </description>
+      <acceptance_criteria>
+        - react-dropzone integration for drag-and-drop
+        - Click-to-browse fallback
+        - Supported formats: JPEG, PNG, WebP, HEIC
+        - File size limit: 10MB max with client-side check
+        - File type validation (MIME type check)
+        - Image preview with zoom/pan capability
+        - Image dimension check (warn if &lt; 800x600px)
+        - Client-side compression if &gt; 5MB (optional for MVP)
+        - EXIF orientation correction
+        - Remove EXIF metadata before upload (privacy)
+        - Clear uploaded image functionality
+        - Responsive design
+        - Accessibility: keyboard navigation, screen reader feedback
+        - Visual feedback on hover/drag
+        - Error messages for invalid files
+      </acceptance_criteria>
+      <dependencies>None</dependencies>
+      <reference>PRD Section 3.2 - Image Upload Module</reference>
+      <implementation>
+        File: frontend/src/components/ImageUpload.tsx
+
+        Features:
+        - useDropzone from react-dropzone
+        - useState for uploaded file and preview
+        - Image compression using browser canvas API (if needed)
+        - EXIF reading and orientation fix
+        - Convert to base64 for API transmission
+
+        UI:
+        - Dashed border dropzone (Tailwind border-dashed)
+        - Upload icon and instructions
+        - Preview image with controls (zoom in/out, rotate, remove)
+        - File info display (name, size, dimensions)
+        - Error/warning messages below dropzone
+
+        Validation:
+        - Max 10MB
+        - MIME type: image/jpeg, image/png, image/webp, image/heic
+        - Min dimensions: 800x600 (warning only)
+      </implementation>
+    </task>
+
+    <task id="3.5" priority="critical" estimated_hours="5">
+      <title>Build Verification Results Component (Results.tsx)</title>
+      <description>
+        Create results display component showing field-by-field verification with visual indicators.
+      </description>
+      <acceptance_criteria>
+        - Overall status badge (PASSED/FAILED) with color coding
+        - Confidence score display with percentage
+        - Field-by-field results list:
+          * Field name
+          * Status icon (✅ match, ❌ mismatch, ⚠️ warning, 🔍 not found)
+          * Expected value
+          * Found value
+          * Confidence percentage
+        - Color coding: Green (match), Red (mismatch), Yellow (warning), Gray (not found)
+        - Expandable details for each field
+        - Copy to clipboard functionality for report
+        - Re-verification button (modify form without re-upload)
+        - Export to PDF button (bonus feature)
+        - Responsive design
+        - Smooth animations (framer-motion)
+      </acceptance_criteria>
+      <dependencies>None</dependencies>
+      <reference>PRD Section 3.5 - Results Display Module</reference>
+      <implementation>
+        File: frontend/src/components/Results.tsx
+
+        Props:
+        - results: VerificationResponse
+        - onReVerify: () =&gt; void
+
+        Structure:
+        1. Overall Status Card
+           - Large badge: PASSED (green) or FAILED (red)
+           - Confidence score: 87%
+           - Processing time: Xms
+
+        2. Field Results List
+           - Map over results array
+           - Each field as collapsible card
+           - Status icon + color
+           - Expected vs Found comparison
+           - Confidence bar
+           - Location coordinates (for highlighting)
+
+        3. Actions
+           - Copy report button
+           - Re-verify button
+           - Export PDF button (bonus)
+
+        Animations:
+        - Fade in on mount
+        - Stagger field cards
+        - Smooth expand/collapse
+      </implementation>
+    </task>
+
+    <task id="3.6" priority="high" estimated_hours="4">
+      <title>Add Image Highlighting Feature (Results.tsx enhancement)</title>
+      <description>
+        Implement canvas overlay to highlight matched text regions on the label image.
+      </description>
+      <acceptance_criteria>
+        - Canvas API overlay on uploaded image
+        - Bounding boxes drawn around matched text
+        - Color-coded boxes (green/red/yellow based on match status)
+        - Field labels displayed near bounding boxes
+        - Hover over field result highlights corresponding region
+        - Click field result zooms to region
+        - Toggle all highlights on/off button
+        - Pan and zoom controls for image
+        - Responsive canvas sizing
+      </acceptance_criteria>
+      <dependencies>3.5</dependencies>
+      <reference>PRD Section 3.6 - Image Highlighting Feature</reference>
+      <implementation>
+        File: frontend/src/components/Results.tsx (add HighlightedImage sub-component)
+
+        Sub-component: HighlightedImage
+        - Props: imageUrl, textLocations[], highlightedField (optional)
+        - Canvas element overlaying image
+        - useEffect to redraw on highlight changes
+
+        Functions:
+        - drawBoundingBox(ctx, box, color, label)
+        - getColorForStatus(status) -&gt; string
+        - handleZoomToField(fieldName)
+        - handleToggleHighlights()
+
+        Interactions:
+        - Mouse hover on field -&gt; highlight corresponding box
+        - Click field -&gt; zoom and center on box
+        - Toggle button -&gt; show/hide all boxes
+      </implementation>
+    </task>
+
+    <task id="3.7" priority="critical" estimated_hours="4">
+      <title>Integrate Components into Main Page (page.tsx)</title>
+      <description>
+        Wire all components together in the main application page with state management.
+      </description>
+      <acceptance_criteria>
+        - Replace placeholder page with full application layout
+        - State management for:
+          * Product type selection
+          * Form data
+          * Uploaded image
+          * Verification results
+          * Loading states
+          * Error states
+        - Layout: Form (left 40%), Image Upload (right 60%)
+        - Results section below (full width, appears after verification)
+        - Verify button triggers API call
+        - Error handling with user-friendly messages
+        - Loading spinner during verification
+        - Success animation on verification complete (optional)
+        - Responsive layout (side-by-side on desktop, stacked on mobile)
+      </acceptance_criteria>
+      <dependencies>3.2, 3.3, 3.4, 3.5</dependencies>
+      <reference>PRD Section 7.1 - Page Structure</reference>
+      <implementation>
+        File: frontend/src/app/page.tsx
+
+        State:
+        - productType: ProductType
+        - formData: LabelFormData
+        - uploadedImage: UploadedFile | null
+        - verificationResults: VerificationResponse | null
+        - isLoading: boolean
+        - error: ErrorResponse | null
+
+        Handlers:
+        - handleFormChange(data: LabelFormData)
+        - handleImageUpload(file: File)
+        - handleVerify() =&gt; API call
+        - handleReVerify() =&gt; clear results, keep form/image
+
+        Layout (Tailwind):
+        - Container: max-w-7xl mx-auto px-4
+        - Grid: grid grid-cols-1 lg:grid-cols-5 gap-6
+        - Form: lg:col-span-2
+        - Image Upload: lg:col-span-3
+        - Results: col-span-full (if results exist)
+
+        Flow:
+        1. User selects product type
+        2. User fills form
+        3. User uploads image
+        4. User clicks Verify
+        5. Loading spinner shown
+        6. API call made
+        7. Results displayed (or error)
+        8. User can re-verify or start over
+      </implementation>
+    </task>
+
+    <task id="3.8" priority="medium" estimated_hours="2">
+      <title>Add Error State Handling and User Feedback</title>
+      <description>
+        Implement comprehensive error handling with user-friendly messages for all failure scenarios.
+      </description>
+      <acceptance_criteria>
+        - Poor image quality error with suggestions
+        - No text detected error with verification tips
+        - Partial match warning with guidance
+        - Network error handling with retry option
+        - API timeout handling (30s limit)
+        - Invalid input validation messages
+        - OCR failure fallback messaging
+        - Toast notifications for success/error (optional)
+      </acceptance_criteria>
+      <dependencies>3.7</dependencies>
+      <reference>PRD Section 3.5.4 - Error State Handling</reference>
+      <implementation>
+        Create: frontend/src/components/ErrorMessage.tsx
+
+        Error types and messages:
+        - INVALID_IMAGE: "Image format not supported. Please use JPEG, PNG, or WebP."
+        - OCR_FAILED: "Could not read text from image. Please ensure good lighting and clear text."
+        - INVALID_INPUT: "Please fill all required fields correctly."
+        - NETWORK_ERROR: "Connection failed. Please check your internet and try again."
+        - TIMEOUT: "Verification is taking longer than expected. Please try again."
+
+        Component: ErrorMessage
+        - Props: error: ErrorResponse, onRetry?: () =&gt; void
+        - Display error icon, title, message, suggestions
+        - Retry button if applicable
+        - Dismissible
+      </implementation>
+    </task>
+  </phase>
+
+  <!-- PHASE 4: TESTING & VALIDATION -->
+  <phase id="4" name="Testing &amp; Validation" priority="high">
+    <description>
+      Comprehensive testing of all components, API endpoints, and compliance logic
+      with real-world label images and edge cases.
+    </description>
+
+    <task id="4.1" priority="high" estimated_hours="3">
+      <title>Manual Testing with Sample Labels</title>
+      <description>
+        Test the complete application with all sample label images across product types.
+      </description>
+      <acceptance_criteria>
+        - Test each sample label from docs/sample-labels/
+        - Verify OCR accuracy &gt; 85%
+        - Verify match/mismatch detection &gt; 90%
+        - Test all product types (spirits, wine, beer)
+        - Test exact match cases (all fields correct)
+        - Test mismatch cases (wrong ABV, brand, etc.)
+        - Test missing field cases
+        - Test poor quality images
+        - Document test results in docs/test-results.md
+        - Record processing times (&lt; 5s target)
+      </acceptance_criteria>
+      <dependencies>1.6, 2.5, 3.7</dependencies>
+      <reference>PRD Section 8.1 - Test Cases</reference>
+    </task>
+
+    <task id="4.2" priority="high" estimated_hours="2">
+      <title>Government Warning Text Verification Testing</title>
+      <description>
+        Specific testing of government warning verification with various OCR scenarios.
+      </description>
+      <acceptance_criteria>
+        - Test with exact warning text
+        - Test with minor OCR errors (95% fuzzy match)
+        - Test with wrong capitalization (should fail)
+        - Test with missing keywords (should fail)
+        - Test with truncated warning (should fail)
+        - Verify critical checks: "GOVERNMENT WARNING" caps, "Surgeon General" caps
+        - Document edge cases and failure modes
+      </acceptance_criteria>
+      <dependencies>4.1</dependencies>
+      <reference>PRD Section 3.4.1 - Government Warning</reference>
+    </task>
+
+    <task id="4.3" priority="high" estimated_hours="2">
+      <title>Conditional Field Validation Testing</title>
+      <description>
+        Test all conditional requirements (age statement, sulfites, country of origin).
+      </description>
+      <acceptance_criteria>
+        - Age statement: Test whisky &lt;4 years (required), whisky &gt;4 years (optional)
+        - Age statement: Test brandy &lt;2 years (required)
+        - Age format: Test all approved TTB age formats
+        - Sulfites: Test wine with sulfites checkbox (required), without (optional)
+        - Country of Origin: Test imported (required), domestic (optional)
+        - Proof: Test optional proof statement with correct/incorrect calculation
+        - Document all test scenarios and outcomes
+      </acceptance_criteria>
+      <dependencies>4.1</dependencies>
+      <reference>PRD Section 3.4.3 - Product-Specific Rules</reference>
+    </task>
+
+    <task id="4.4" priority="medium" estimated_hours="2">
+      <title>Edge Case Testing</title>
+      <description>
+        Test edge cases, boundary conditions, and error scenarios.
+      </description>
+      <acceptance_criteria>
+        - Test 10MB image (max size)
+        - Test 11MB image (should reject)
+        - Test unsupported format (BMP, GIF, etc.)
+        - Test corrupted image file
+        - Test blank/empty image
+        - Test image with no text
+        - Test extremely low resolution image
+        - Test image with glare/reflections
+        - Test missing required form fields
+        - Test invalid ABV (negative, &gt;100%)
+        - Test non-standard net contents
+        - Document all edge case behaviors
+      </acceptance_criteria>
+      <dependencies>4.1</dependencies>
+      <reference>PRD Section 8.1 - Test Cases TC-5, TC-6</reference>
+    </task>
+
+    <task id="4.5" priority="medium" estimated_hours="3">
+      <title>Write Backend Unit Tests (pytest)</title>
+      <description>
+        Create pytest unit tests for core backend functions.
+      </description>
+      <acceptance_criteria>
+        - Test text normalization (lowercase, punctuation, OCR errors)
+        - Test fuzzy matching with various thresholds
+        - Test ABV extraction from text (various formats)
+        - Test volume extraction and unit conversion
+        - Test government warning matching (exact, fuzzy, failures)
+        - Test age statement format validation
+        - Test proof calculation
+        - Test product type conditional logic
+        - Mock Google Cloud Vision API responses
+        - Code coverage &gt; 80% for verification.py
+        - All tests pass
+      </acceptance_criteria>
+      <dependencies>2.5</dependencies>
+      <reference>PRD Section 8.2 - Backend Testing</reference>
+      <implementation>
+        File: functions/tests/test_verification.py
+        File: functions/tests/test_ocr.py
+        File: functions/tests/test_models.py
+
+        Use pytest fixtures for:
+        - Sample form data
+        - Mock OCR results
+        - Sample label text
+
+        Use pytest-mock for:
+        - Google Cloud Vision API
+        - Firebase Storage
+      </implementation>
+    </task>
+
+    <task id="4.6" priority="low" estimated_hours="2">
+      <title>Write Frontend Unit Tests (Jest)</title>
+      <description>
+        Create Jest unit tests for React components and utilities (optional for MVP).
+      </description>
+      <acceptance_criteria>
+        - Test validation schemas (Zod)
+        - Test API client functions
+        - Test Form component rendering and validation
+        - Test ImageUpload component file handling
+        - Test Results component display logic
+        - Use React Testing Library for component tests
+        - All tests pass
+      </acceptance_criteria>
+      <dependencies>3.7</dependencies>
+      <reference>PRD Section 8.2 - Frontend Testing</reference>
+    </task>
+
+    <task id="4.7" priority="medium" estimated_hours="1">
+      <title>Performance Testing and Optimization</title>
+      <description>
+        Measure and optimize application performance against PRD targets.
+      </description>
+      <acceptance_criteria>
+        - Page load time &lt; 2s (Lighthouse LCP)
+        - Image upload &lt; 1s for 5MB image
+        - OCR processing &lt; 3s for typical label
+        - Total verification time &lt; 5s end-to-end
+        - Lighthouse performance score &gt; 90
+        - Lighthouse accessibility score &gt; 90
+        - Test with throttled connection (Fast 3G)
+        - Identify and fix bottlenecks
+      </acceptance_criteria>
+      <dependencies>3.7</dependencies>
+      <reference>PRD Section 4.1 - Performance Requirements</reference>
+    </task>
+
+    <task id="4.8" priority="medium" estimated_hours="1">
+      <title>Cross-Browser and Responsive Testing</title>
+      <description>
+        Test application across different browsers and devices.
+      </description>
+      <acceptance_criteria>
+        - Test Chrome (latest)
+        - Test Firefox (latest)
+        - Test Safari (latest)
+        - Test Edge (latest)
+        - Test mobile iOS (Safari)
+        - Test mobile Android (Chrome)
+        - Test tablet (iPad)
+        - Verify responsive breakpoints (320px - 2560px)
+        - All core features functional on all platforms
+        - No layout breaks or visual bugs
+      </acceptance_criteria>
+      <dependencies>3.7</dependencies>
+      <reference>PRD Section 4.5 - Browser Support</reference>
+    </task>
+  </phase>
+
+  <!-- PHASE 5: POLISH & DEPLOYMENT -->
+  <phase id="5" name="Polish &amp; Deployment" priority="medium">
+    <description>
+      Final polish, documentation updates, and production deployment with monitoring.
+    </description>
+
+    <task id="5.1" priority="medium" estimated_hours="2">
+      <title>Add Accessibility Improvements</title>
+      <description>
+        Ensure WCAG 2.1 AA compliance for accessibility.
+      </description>
+      <acceptance_criteria>
+        - All form inputs have proper labels and ARIA attributes
+        - Keyboard navigation works for all interactive elements
+        - Focus indicators visible and clear
+        - Color contrast ratio &gt; 4.5:1 for all text
+        - Screen reader compatible (test with VoiceOver/NVDA)
+        - Error messages announced to screen readers
+        - Success messages announced
+        - Image upload accessible (keyboard + screen reader)
+        - Results display accessible
+        - Lighthouse accessibility score &gt; 95
+      </acceptance_criteria>
+      <dependencies>3.7</dependencies>
+      <reference>PRD Section 4.5 - Accessibility</reference>
+    </task>
+
+    <task id="5.2" priority="medium" estimated_hours="2">
+      <title>Add Loading States and Animations</title>
+      <description>
+        Polish the user experience with smooth loading states and transitions.
+      </description>
+      <acceptance_criteria>
+        - Loading spinner during verification (framer-motion)
+        - Skeleton loaders for results (before data loads)
+        - Smooth page transitions
+        - Form field animations on validation errors
+        - Success animation when verification completes
+        - Progress indicator for multi-step operations
+        - Micro-interactions on button hover/click
+        - Smooth scroll to results section
+      </acceptance_criteria>
+      <dependencies>3.7</dependencies>
+      <reference>PRD Section 5.2 - Frontend Stack (framer-motion)</reference>
+    </task>
+
+    <task id="5.3" priority="high" estimated_hours="2">
+      <title>Update Documentation (README.md)</title>
+      <description>
+        Update README with complete setup instructions, usage guide, and API documentation.
+      </description>
+      <acceptance_criteria>
+        - Project overview and purpose
+        - Tech stack summary
+        - Local development setup instructions (step-by-step)
+        - Firebase deployment guide
+        - Environment variables documentation
+        - API request/response examples
+        - Known limitations clearly documented (OCR limitations from PRD 16.3)
+        - Future roadmap
+        - Screenshots of application
+        - Contributing guidelines (optional)
+      </acceptance_criteria>
+      <dependencies>4.1</dependencies>
+      <reference>PRD Section 14.1 - README.md Requirements</reference>
+    </task>
+
+    <task id="5.4" priority="medium" estimated_hours="1">
+      <title>Create User Guide Documentation</title>
+      <description>
+        Write user-facing guide for how to use the application.
+      </description>
+      <acceptance_criteria>
+        - Step-by-step usage instructions with screenshots
+        - How to select product type
+        - How to fill the form correctly
+        - How to upload label images
+        - How to interpret results
+        - Troubleshooting common issues
+        - Tips for best OCR results (lighting, resolution, angle)
+        - FAQ section
+        - Save as docs/user-guide.md
+      </acceptance_criteria>
+      <dependencies>3.7</dependencies>
+      <reference>PRD Section 14.3 - User Guide</reference>
+    </task>
+
+    <task id="5.5" priority="high" estimated_hours="1">
+      <title>Production Deployment to Firebase</title>
+      <description>
+        Deploy the complete application to Firebase production environment.
+      </description>
+      <acceptance_criteria>
+        - Environment variables configured in production
+        - Frontend built and deployed to Firebase Hosting
+        - Backend functions deployed to Cloud Functions
+        - Storage rules deployed
+        - Custom domain configured (optional)
+        - HTTPS enforced
+        - Test production deployment with real data
+        - Verify all features work in production
+        - Production URL documented in README
+      </acceptance_criteria>
+      <dependencies>1.5, 2.5, 3.7</dependencies>
+      <reference>PRD Section 9.1 - Firebase Deployment</reference>
+      <implementation>
+        Commands:
+        ```bash
+        # Frontend build
+        cd frontend &amp;&amp; npm run build
+
+        # Deploy everything
+        firebase deploy
+
+        # Or deploy separately:
+        firebase deploy --only hosting
+        firebase deploy --only functions
+        firebase deploy --only storage
+        ```
+      </implementation>
+    </task>
+
+    <task id="5.6" priority="medium" estimated_hours="1">
+      <title>Set Up Error Tracking and Monitoring</title>
+      <description>
+        Configure Firebase monitoring and error tracking for production.
+      </description>
+      <acceptance_criteria>
+        - Firebase Performance Monitoring enabled
+        - Cloud Functions logs configured
+        - Error tracking set up (Firebase Crashlytics or Sentry)
+        - Performance metrics tracked:
+          * Page load times
+          * API latency
+          * Error rates
+          * User flows
+        - Alerts configured for:
+          * Error rate &gt; 5%
+          * API latency &gt; 5s
+          * Function failures
+        - Dashboard accessible to team
+      </acceptance_criteria>
+      <dependencies>5.5</dependencies>
+      <reference>PRD Section 9.4 - Monitoring &amp; Analytics</reference>
+    </task>
+
+    <task id="5.7" priority="low" estimated_hours="2">
+      <title>Add Analytics (Optional)</title>
+      <description>
+        Integrate Google Analytics for user behavior tracking (optional for MVP).
+      </description>
+      <acceptance_criteria>
+        - Google Analytics 4 integrated
+        - Track key events:
+          * Page views
+          * Product type selection
+          * Image upload
+          * Verification submission
+          * Result view
+        - User flow visualization
+        - Device/browser distribution
+        - Privacy policy updated (if collecting analytics)
+        - Cookie consent banner (if required by jurisdiction)
+      </acceptance_criteria>
+      <dependencies>5.5</dependencies>
+      <reference>PRD Section 9.4 - Google Analytics (Optional)</reference>
+    </task>
+  </phase>
+
+  <!-- PHASE 6: BONUS FEATURES (Post-MVP) -->
+  <phase id="6" name="Bonus Features" priority="low">
+    <description>
+      Optional enhancements beyond the MVP scope that add significant value.
+      These can be implemented in Phase 2 development.
+    </description>
+
+    <task id="6.1" priority="low" estimated_hours="3">
+      <title>PDF Export Functionality</title>
+      <description>
+        Add ability to export verification results as a PDF report.
+      </description>
+      <acceptance_criteria>
+        - Export button in Results component
+        - PDF includes:
+          * Overall status
+          * All field results with status
+          * Label image with highlights
+          * Timestamp and unique ID
+          * Disclaimer text
+        - Download as "ttb-verification-[timestamp].pdf"
+        - Styled PDF with TTB branding
+        - Library: jsPDF or react-pdf
+      </acceptance_criteria>
+      <dependencies>3.5</dependencies>
+      <reference>PRD Section 3.5.3 - Export Options, Section 11.1</reference>
+    </task>
+
+    <task id="6.2" priority="low" estimated_hours="2">
+      <title>Bottler Name and Address Verification</title>
+      <description>
+        Add verification for optional bottler name and address fields.
+      </description>
+      <acceptance_criteria>
+        - Add bottler_name verification in verification.py
+        - Add address verification (city, state)
+        - Format normalization for addresses
+        - Add to compliance scoring
+        - Update frontend form to make fields more prominent
+        - Add tooltips explaining requirements
+      </acceptance_criteria>
+      <dependencies>2.4</dependencies>
+      <reference>PRD Section 3.1.1 - Bottler/Importer Name (Optional bonus feature)</reference>
+    </task>
+
+    <task id="6.3" priority="low" estimated_hours="3">
+      <title>Batch Processing</title>
+      <description>
+        Allow users to upload and verify multiple labels at once.
+      </description>
+      <acceptance_criteria>
+        - Multi-file upload (up to 10 images)
+        - Queue processing with progress bar
+        - Results table showing all verifications
+        - Export all results as CSV or PDF
+        - Limit: 10 images per batch (prevent abuse)
+      </acceptance_criteria>
+      <dependencies>3.4, 3.5</dependencies>
+      <reference>PRD Section 11.1 - Phase 2 Features</reference>
+    </task>
+
+    <task id="6.4" priority="low" estimated_hours="4">
+      <title>User Accounts and History</title>
+      <description>
+        Add Firebase Authentication and save verification history.
+      </description>
+      <acceptance_criteria>
+        - Firebase Authentication (email/password, Google OAuth)
+        - Firestore database for storing verifications
+        - User dashboard showing past verifications
+        - Delete verification functionality
+        - Export history
+        - Privacy: images deleted after 24h, only metadata stored
+      </acceptance_criteria>
+      <dependencies>5.5</dependencies>
+      <reference>PRD Section 11.1 - Phase 2 Features (Historical Tracking)</reference>
+    </task>
+
+    <task id="6.5" priority="low" estimated_hours="2">
+      <title>Paste from Clipboard</title>
+      <description>
+        Allow users to paste screenshots directly into the image upload area.
+      </description>
+      <acceptance_criteria>
+        - Detect paste event on image upload component
+        - Extract image from clipboard
+        - Convert to File object
+        - Display preview
+        - Works with screenshots from macOS/Windows/Linux
+      </acceptance_criteria>
+      <dependencies>3.4</dependencies>
+      <reference>PRD Section 3.2.1 - Paste from Clipboard (Bonus)</reference>
+    </task>
+
+    <task id="6.6" priority="low" estimated_hours="3">
+      <title>Tesseract OCR Fallback</title>
+      <description>
+        Implement Tesseract OCR as fallback when Google Cloud Vision API fails or is unavailable.
+      </description>
+      <acceptance_criteria>
+        - Install pytesseract in backend (functions/pyproject.toml)
+        - Implement fallback logic in ocr.py
+        - Try Google Cloud Vision first
+        - Fall back to Tesseract on failure
+        - Log which OCR engine was used
+        - Test accuracy comparison
+        - Note in results which engine was used
+      </acceptance_criteria>
+      <dependencies>2.2</dependencies>
+      <reference>PRD Section 3.3.1 - Fallback: Tesseract OCR, Section 4.4 - Reliability</reference>
+    </task>
+  </phase>
+
+  <!-- SUMMARY AND METRICS -->
+  <summary>
+    <total_tasks>48</total_tasks>
+    <critical_tasks>12</critical_tasks>
+    <high_tasks>14</high_tasks>
+    <medium_tasks>14</medium_tasks>
+    <low_tasks>8</low_tasks>
+
+    <estimated_hours>
+      <phase1>5</phase1>
+      <phase2>24</phase2>
+      <phase3>29</phase3>
+      <phase4>15</phase4>
+      <phase5>11</phase5>
+      <phase6>17</phase6>
+      <total>101</total>
+      <mvp_only>84</mvp_only>
+    </estimated_hours>
+
+    <timeline>
+      <mvp_target_days>3</mvp_target_days>
+      <with_bonus_days>5</with_bonus_days>
+    </timeline>
+
+    <progress>
+      <completed_tasks>4</completed_tasks>
+      <remaining_tasks>44</remaining_tasks>
+      <completion_percentage>8.3</completion_percentage>
+      <hours_completed>2.5</hours_completed>
+      <hours_remaining>98.5</hours_remaining>
+
+      <phase_status>
+        <phase id="1" name="Core Infrastructure &amp; Setup" completed="4" total="6" status="in_progress" />
+        <phase id="2" name="Backend Implementation" completed="0" total="6" status="pending" />
+        <phase id="3" name="Frontend Components" completed="0" total="8" status="pending" />
+        <phase id="4" name="Testing &amp; Validation" completed="0" total="8" status="pending" />
+        <phase id="5" name="Polish &amp; Deployment" completed="0" total="7" status="pending" />
+        <phase id="6" name="Bonus Features" completed="0" total="6" status="pending" />
+      </phase_status>
+
+      <completed_task_list>
+        <task id="1.1" title="Enable Firebase Services" completed_date="2025-10-25" />
+        <task id="1.2" title="Enable Google Cloud Vision API" completed_date="2025-10-25" />
+        <task id="1.3" title="Configure Firebase Storage Security Rules" completed_date="2025-10-25" />
+        <task id="1.5" title="Connect GitHub to Firebase App Hosting" completed_date="2025-10-25" />
+      </completed_task_list>
+
+      <next_recommended_tasks>
+        <task id="1.4" title="Create Environment Variables Configuration" priority="critical" />
+        <task id="1.6" title="Add Sample Label Images" priority="medium" />
+        <task id="2.1" title="Implement Python Data Models" priority="critical" />
+      </next_recommended_tasks>
+    </progress>
+
+    <success_criteria>
+      <criterion>Label text extraction accuracy &gt; 90%</criterion>
+      <criterion>Match/mismatch detection accuracy &gt; 95%</criterion>
+      <criterion>End-to-end verification time &lt; 5 seconds</criterion>
+      <criterion>User comprehension of results &gt; 95% (clear messaging)</criterion>
+      <criterion>Lighthouse performance score &gt; 90</criterion>
+      <criterion>Lighthouse accessibility score &gt; 90</criterion>
+      <criterion>All critical TTB requirements verified</criterion>
+      <criterion>Mobile responsive (320px - 2560px)</criterion>
+    </success_criteria>
+
+    <known_limitations>
+      <limitation>
+        Same Field of Vision: Cannot verify spatial positioning (40% circumference rule)
+        Reason: Requires 3D label layout analysis, out of scope for OCR-only verification
+      </limitation>
+      <limitation>
+        Visual Separation: Cannot verify "separate and apart" requirement for Class/Type and Warning
+        Reason: Requires spatial analysis beyond text extraction
+      </limitation>
+      <limitation>
+        Font Styling: Cannot verify bold formatting for "GOVERNMENT WARNING"
+        Reason: OCR extracts text content only, not formatting
+      </limitation>
+      <limitation>
+        Font Size: Cannot verify minimum font size requirements
+        Reason: No reliable pixel-to-point size conversion without scale reference
+      </limitation>
+      <limitation>
+        Color Requirements: Cannot verify color contrast or specific colors
+        Reason: OCR processes in grayscale for text detection
+      </limitation>
+    </known_limitations>
+  </summary>
+
+  <!-- NOTES AND REMINDERS -->
+  <notes>
+    <note priority="critical">
+      ALWAYS use uv for Python package management, NEVER pip.
+      Reason: 10-100x faster, better dependency resolution, project standard.
+    </note>
+
+    <note priority="critical">
+      Government Warning must use 95% fuzzy match, NOT exact match.
+      Reason: Allows minor OCR errors while still being strict on critical elements.
+    </note>
+
+    <note priority="critical">
+      Age Statement is CONDITIONAL, not always required.
+      Only mandatory if: whisky &lt;4 years, brandy &lt;2 years, or age mentioned on label.
+    </note>
+
+    <note priority="critical">
+      Standards of Fill ONLY apply to Distilled Spirits and Wine, NOT Beer.
+      - Spirits: 27 CFR 5.47a (25 standard sizes: 50ml to 3750ml)
+      - Wine: 27 CFR 4.71 (25 standard sizes: 50ml to 3000ml, includes 2250ml)
+      - Beer: 27 CFR 7.70 - NO standards of fill (any container size allowed)
+
+      Beer/malt beverages only require proper net contents labeling in U.S. standard measures.
+      Unlike spirits/wine, beer has no restricted container sizes under TTB regulations.
+
+      For verification:
+      - Spirits/Wine: Check against standards, WARN if non-standard (don't fail)
+      - Beer: Only verify volume matches label vs form (no standard size check)
+
+      MUST support multiple units (ml, L, fl oz, pints, quarts, gallons) for all product types.
+      Spirits and Wine have different approved sizes (e.g., 2250ml wine-only, 3750ml spirits-only).
+    </note>
+
+    <note priority="high">
+      Document all OCR limitations in user-facing messages.
+      Users must understand this is a pre-check, not official TTB certification.
+    </note>
+
+    <note priority="high">
+      All TTB compliance rules must reference specific 27 CFR sections in code comments.
+      Example: "27 CFR 5.74 - Age Statement Requirements"
+    </note>
+
+    <note priority="medium">
+      Use TypeScript strict mode for all frontend code.
+      Use Python type hints for all backend code.
+      Reason: Type safety prevents bugs and improves maintainability.
+    </note>
+
+    <note priority="medium">
+      Test with REAL label images from TTB examples, not mock data.
+      Reason: Real-world OCR accuracy is the critical success metric.
+    </note>
+
+    <note priority="low">
+      Consider adding telemetry for OCR accuracy metrics in production.
+      Track: confidence scores, field detection rates, error types.
+    </note>
+  </notes>
+</project>
