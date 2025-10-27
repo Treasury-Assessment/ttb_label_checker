@@ -570,7 +570,6 @@ def test_bourbon_4yr_standard():
 - **27 CFR Part 4** - Wine Labeling
 - **27 CFR Part 7** - Beer/Malt Beverage Labeling
 - **27 CFR Part 16** - Health Warning Statement
-- **TTB Label Examples**: https://www.ttb.gov/labeling/sample-labels
 
 ---
 
