@@ -206,7 +206,7 @@ def extract_text_vision_api(image: Image.Image) -> OCRResult:
     """
     if not VISION_API_AVAILABLE:
         raise OCRProcessingError(
-            "Google Cloud Vision API not available. Install google-cloud-vision."
+            "Google Cloud Vision API not available. Please install google-cloud-vision: uv pip install google-cloud-vision"
         )
 
     start_time = time.time()
@@ -520,6 +520,9 @@ def search_text_fuzzy(
     """
     Search for text in OCR result using fuzzy matching.
 
+    Uses fuzzywuzzy library to find the best match across all text blocks,
+    allowing for minor OCR errors and variations.
+
     Args:
         text: Text to search for
         ocr_result: OCR result to search in
@@ -528,23 +531,46 @@ def search_text_fuzzy(
     Returns:
         Tuple of (found, text_block, similarity_score)
 
-    Note:
-        Fuzzy matching implemented in verification.py using fuzzywuzzy.
-        This is a helper stub for future use.
+    Example:
+        >>> found, block, score = search_text_fuzzy("Jack Daniel's", ocr_result, 0.85)
+        >>> if found:
+        ...     print(f"Found at {block.bounding_box} with score {score:.2f}")
     """
-    # TODO: Implement fuzzy search across text blocks
-    # For now, use exact substring matching
+    try:
+        from fuzzywuzzy import fuzz
+    except ImportError:
+        # Fallback to exact substring matching if fuzzywuzzy not available
+        print("Warning: fuzzywuzzy not installed. Using exact matching. Install with: uv pip install python-levenshtein fuzzywuzzy")
+        normalized_search = normalize_text(text)
+        normalized_full = normalize_text(ocr_result.full_text)
+
+        if normalized_search in normalized_full:
+            # Try to find which block contains it
+            for block in ocr_result.text_blocks:
+                if normalized_search in normalize_text(block.text):
+                    return True, block, 1.0
+            return True, None, 1.0
+        return False, None, 0.0
+
+    # Normalize search text
     normalized_search = normalize_text(text)
-    normalized_full = normalize_text(ocr_result.full_text)
 
-    if normalized_search in normalized_full:
-        # Found exact match (after normalization)
-        # Try to find which block contains it
-        for block in ocr_result.text_blocks:
-            if normalized_search in normalize_text(block.text):
-                return True, block, 1.0
+    # Search through all text blocks and find best match
+    best_match_block = None
+    best_score = 0.0
 
-        # Found in full text but not in specific block
-        return True, None, 1.0
+    for block in ocr_result.text_blocks:
+        normalized_block = normalize_text(block.text)
 
-    return False, None, 0.0
+        # Use token_sort_ratio for fuzzy matching (handles word order differences)
+        score = fuzz.token_sort_ratio(normalized_search, normalized_block) / 100.0
+
+        if score > best_score:
+            best_score = score
+            best_match_block = block
+
+    # Check if best match meets threshold
+    if best_score >= threshold:
+        return True, best_match_block, best_score
+
+    return False, None, best_score

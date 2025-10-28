@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { ProductType, LabelFormData, VerificationResponse, UploadedFile } from '@/types';
 import { verifyLabel, APIError } from '@/lib/api';
 import LabelForm from '@/components/LabelForm';
@@ -14,10 +14,28 @@ export default function Home() {
   const [results, setResults] = useState<VerificationResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Cleanup: Revoke object URL when component unmounts
+  useEffect(() => {
+    return () => {
+      if (uploadedFile?.preview) {
+        URL.revokeObjectURL(uploadedFile.preview);
+      }
+    };
+  }, [uploadedFile]);
+
   const handleImageSelect = (file: File | null) => {
     if (!file) {
+      // Revoke old URL before clearing
+      if (uploadedFile?.preview) {
+        URL.revokeObjectURL(uploadedFile.preview);
+      }
       setUploadedFile(null);
       return;
+    }
+
+    // Revoke old URL before creating new one
+    if (uploadedFile?.preview) {
+      URL.revokeObjectURL(uploadedFile.preview);
     }
 
     // Create preview URL
@@ -57,6 +75,10 @@ export default function Home() {
   };
 
   const handleReset = () => {
+    // Revoke URL before clearing
+    if (uploadedFile?.preview) {
+      URL.revokeObjectURL(uploadedFile.preview);
+    }
     setResults(null);
     setError(null);
     setUploadedFile(null);
@@ -89,6 +111,8 @@ export default function Home() {
                   key={type}
                   onClick={() => setProductType(type)}
                   disabled={isLoading}
+                  aria-label={`Select ${type} product type`}
+                  aria-pressed={productType === type}
                   className={`
                     py-3 px-4 rounded-lg border-2 font-medium capitalize transition-all
                     ${productType === type
@@ -98,9 +122,11 @@ export default function Home() {
                     ${isLoading ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}
                   `}
                 >
-                  {type === 'spirits' && '🥃'}
-                  {type === 'wine' && '🍷'}
-                  {type === 'beer' && '🍺'}
+                  <span aria-hidden="true">
+                    {type === 'spirits' && '🥃'}
+                    {type === 'wine' && '🍷'}
+                    {type === 'beer' && '🍺'}
+                  </span>
                   {' '}
                   {type}
                 </button>

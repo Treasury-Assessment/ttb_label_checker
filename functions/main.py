@@ -13,6 +13,7 @@ import traceback
 
 from firebase_admin import initialize_app
 from firebase_functions import https_fn
+from pydantic import BaseModel, Field, ValidationError, field_validator
 
 # Initialize Firebase Admin
 initialize_app()
@@ -30,6 +31,54 @@ from ocr import (
     extract_text_from_image,
 )
 from verification import verify_label as verify_label_logic
+
+
+# ============================================================================
+# PYDANTIC REQUEST MODELS
+# ============================================================================
+
+class FormDataRequest(BaseModel):
+    """Pydantic model for form data validation."""
+    brand_name: str = Field(..., min_length=1, description="Brand or trade name")
+    product_class: str = Field(..., min_length=1, description="Product class/type")
+    alcohol_content: float = Field(..., ge=0.0, le=100.0, description="Alcohol by volume percentage")
+
+    # Common optional fields
+    net_contents: str | None = Field(None, description="Volume with unit")
+    bottler_name: str | None = None
+    address: str | None = None
+    country_of_origin: str | None = None
+    is_imported: bool = False
+
+    # Spirits-specific fields
+    age_statement: str | None = None
+    proof: float | None = Field(None, ge=0.0, description="Alcohol proof")
+    state_of_distillation: str | None = None
+    commodity_statement: str | None = None
+
+    # Wine-specific fields
+    vintage_year: int | None = Field(None, ge=1800, le=2100, description="4-digit year")
+    contains_sulfites: bool = False
+    appellation: str | None = None
+
+    # Beer-specific fields
+    style: str | None = None
+
+
+class VerificationRequest(BaseModel):
+    """Pydantic model for the complete verification request."""
+    product_type: str = Field(..., description="Product type: spirits, wine, or beer")
+    form_data: FormDataRequest
+    image: str = Field(..., min_length=10, description="Base64 encoded image")
+
+    @field_validator('product_type')
+    @classmethod
+    def validate_product_type(cls, v: str) -> str:
+        """Validate product type is one of the allowed values."""
+        allowed = ['spirits', 'wine', 'beer']
+        if v.lower() not in allowed:
+            raise ValueError(f"product_type must be one of: {', '.join(allowed)}")
+        return v.lower()
 
 
 @https_fn.on_request(cors=True, region="us-east4")
@@ -72,94 +121,64 @@ def verify_label(req: https_fn.Request) -> https_fn.Response:
         )
 
     try:
-        # Parse request body
+        # Parse and validate request body with Pydantic
         request_json = req.get_json(silent=True)
 
         if not request_json:
+            error_response = ErrorResponse(
+                error_code="INVALID_INPUT",
+                message="Request body must be valid JSON"
+            )
             return https_fn.Response(
-                json.dumps({
-                    "status": "error",
-                    "error_code": "INVALID_INPUT",
-                    "message": "Request body must be valid JSON"
-                }),
+                json.dumps(error_response.to_dict()),
                 status=400,
                 headers={"Content-Type": "application/json"}
             )
 
-        # Validate required fields
-        required_fields = ["product_type", "form_data", "image"]
-        missing_fields = [field for field in required_fields if field not in request_json]
-
-        if missing_fields:
-            return https_fn.Response(
-                json.dumps({
-                    "status": "error",
-                    "error_code": "INVALID_INPUT",
-                    "message": f"Missing required fields: {', '.join(missing_fields)}"
-                }),
-                status=400,
-                headers={"Content-Type": "application/json"}
-            )
-
-        # Extract and validate product_type
-        product_type_str = request_json.get("product_type", "").lower()
+        # Validate request with Pydantic
         try:
-            product_type = ProductType(product_type_str)
-        except ValueError:
+            verification_request = VerificationRequest(**request_json)
+        except ValidationError as e:
+            # Format validation errors
+            error_details = []
+            for error in e.errors():
+                field_path = " -> ".join(str(x) for x in error["loc"])
+                error_details.append(f"{field_path}: {error['msg']}")
+
+            error_response = ErrorResponse(
+                error_code="INVALID_INPUT",
+                message="Request validation failed",
+                details={"errors": error_details}
+            )
             return https_fn.Response(
-                json.dumps({
-                    "status": "error",
-                    "error_code": "INVALID_INPUT",
-                    "message": f"Invalid product_type: '{product_type_str}'. Must be 'spirits', 'wine', or 'beer'"
-                }),
+                json.dumps(error_response.to_dict()),
                 status=400,
                 headers={"Content-Type": "application/json"}
             )
 
-        # Parse form data into FormData model
-        form_data_dict = request_json.get("form_data", {})
-        try:
-            form_data = FormData(
-                brand_name=form_data_dict.get("brand_name", ""),
-                product_class=form_data_dict.get("product_class", ""),
-                alcohol_content=float(form_data_dict.get("alcohol_content", 0)),
-                net_contents=form_data_dict.get("net_contents"),
-                bottler_name=form_data_dict.get("bottler_name"),
-                address=form_data_dict.get("address"),
-                country_of_origin=form_data_dict.get("country_of_origin"),
-                is_imported=form_data_dict.get("is_imported", False),
-                age_statement=form_data_dict.get("age_statement"),
-                proof=float(form_data_dict.get("proof")) if form_data_dict.get("proof") is not None else None,
-                state_of_distillation=form_data_dict.get("state_of_distillation"),
-                commodity_statement=form_data_dict.get("commodity_statement"),
-                vintage_year=int(form_data_dict.get("vintage_year")) if form_data_dict.get("vintage_year") else None,
-                contains_sulfites=form_data_dict.get("contains_sulfites", False),
-                appellation=form_data_dict.get("appellation"),
-                style=form_data_dict.get("style"),
-            )
-        except (ValueError, KeyError) as e:
-            return https_fn.Response(
-                json.dumps({
-                    "status": "error",
-                    "error_code": "INVALID_INPUT",
-                    "message": f"Invalid form data: {str(e)}"
-                }),
-                status=400,
-                headers={"Content-Type": "application/json"}
-            )
+        # Convert Pydantic models to internal dataclasses
+        product_type = ProductType(verification_request.product_type)
 
-        # Extract image
-        image_base64 = request_json.get("image", "")
-        if not image_base64:
-            return https_fn.Response(
-                json.dumps({
-                    "status": "error",
-                    "error_code": "INVALID_INPUT",
-                    "message": "Image data is required"
-                }),
-                status=400,
-                headers={"Content-Type": "application/json"}
-            )
+        form_data = FormData(
+            brand_name=verification_request.form_data.brand_name,
+            product_class=verification_request.form_data.product_class,
+            alcohol_content=verification_request.form_data.alcohol_content,
+            net_contents=verification_request.form_data.net_contents,
+            bottler_name=verification_request.form_data.bottler_name,
+            address=verification_request.form_data.address,
+            country_of_origin=verification_request.form_data.country_of_origin,
+            is_imported=verification_request.form_data.is_imported,
+            age_statement=verification_request.form_data.age_statement,
+            proof=verification_request.form_data.proof,
+            state_of_distillation=verification_request.form_data.state_of_distillation,
+            commodity_statement=verification_request.form_data.commodity_statement,
+            vintage_year=verification_request.form_data.vintage_year,
+            contains_sulfites=verification_request.form_data.contains_sulfites,
+            appellation=verification_request.form_data.appellation,
+            style=verification_request.form_data.style,
+        )
+
+        image_base64 = verification_request.image
 
         # STEP 1: OCR Processing
         try:

@@ -6,7 +6,7 @@
  * Drag-and-drop image upload with preview and validation
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { validateImageFile } from '@/lib/api';
 import type { UploadedFile } from '@/types';
@@ -19,6 +19,16 @@ interface ImageUploadProps {
 
 export default function ImageUpload({ onImageSelect, uploadedFile, disabled = false }: ImageUploadProps) {
   const [error, setError] = useState<string | null>(null);
+
+  // Cleanup: Revoke object URL when component unmounts or uploadedFile changes
+  useEffect(() => {
+    // Cleanup function
+    return () => {
+      if (uploadedFile?.preview) {
+        URL.revokeObjectURL(uploadedFile.preview);
+      }
+    };
+  }, [uploadedFile?.preview]);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     setError(null);
@@ -52,6 +62,10 @@ export default function ImageUpload({ onImageSelect, uploadedFile, disabled = fa
   });
 
   const clearImage = () => {
+    // Revoke object URL before clearing to prevent memory leak
+    if (uploadedFile?.preview) {
+      URL.revokeObjectURL(uploadedFile.preview);
+    }
     setError(null);
     onImageSelect(null as any); // Clear selection
   };

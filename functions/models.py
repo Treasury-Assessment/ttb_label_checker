@@ -8,7 +8,7 @@ Author: TTB Label Verification System
 Date: 2025-10-27
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, asdict
 from enum import Enum
 
 
@@ -195,41 +195,9 @@ class FormData:
         Returns:
             Dictionary with all non-None fields
         """
-        result = {
-            "brand_name": self.brand_name,
-            "product_class": self.product_class,
-            "alcohol_content": self.alcohol_content,
-        }
-
-        # Add optional fields if present
-        if self.net_contents:
-            result["net_contents"] = self.net_contents
-        if self.bottler_name:
-            result["bottler_name"] = self.bottler_name
-        if self.address:
-            result["address"] = self.address
-        if self.country_of_origin:
-            result["country_of_origin"] = self.country_of_origin
-        if self.is_imported:
-            result["is_imported"] = self.is_imported
-        if self.age_statement:
-            result["age_statement"] = self.age_statement
-        if self.proof is not None:
-            result["proof"] = self.proof
-        if self.state_of_distillation:
-            result["state_of_distillation"] = self.state_of_distillation
-        if self.commodity_statement:
-            result["commodity_statement"] = self.commodity_statement
-        if self.vintage_year:
-            result["vintage_year"] = self.vintage_year
-        if self.contains_sulfites:
-            result["contains_sulfites"] = self.contains_sulfites
-        if self.appellation:
-            result["appellation"] = self.appellation
-        if self.style:
-            result["style"] = self.style
-
-        return result
+        # Use asdict and filter out None values
+        data = asdict(self)
+        return {k: v for k, v in data.items() if v is not None and v is not False}
 
 
 @dataclass
@@ -314,27 +282,13 @@ class FieldResult:
         Returns:
             Dictionary with all field result data
         """
-        result = {
-            "field_name": self.field_name,
-            "status": str(self.status),
-            "expected": self.expected,
-            "found": self.found,
-            "confidence": self.confidence,
-            "message": self.message,
-        }
-
+        data = asdict(self)
+        # Convert status enum to string
+        data["status"] = str(self.status)
+        # Convert location BoundingBox to dict if present
         if self.location:
-            result["location"] = {
-                "x": self.location.x,
-                "y": self.location.y,
-                "width": self.location.width,
-                "height": self.location.height,
-            }
-
-        if self.cfr_reference:
-            result["cfr_reference"] = self.cfr_reference
-
-        return result
+            data["location"] = asdict(self.location)
+        return {k: v for k, v in data.items() if v is not None}
 
 
 @dataclass
@@ -435,25 +389,16 @@ class VerificationResult:
         Returns:
             Dictionary with all verification result data
         """
-        result = {
-            "status": "success",
-            "overall_match": self.overall_match,
-            "confidence_score": self.confidence_score,
-            "field_results": [fr.to_dict() for fr in self.field_results],
-            "ocr_full_text": self.ocr_full_text,
-            "processing_time_ms": self.processing_time_ms,
+        data = asdict(self)
+        # Add status field
+        data["status"] = "success"
+        # Convert nested FieldResult objects to dicts
+        data["field_results"] = [fr.to_dict() for fr in self.field_results]
+        # Filter out None values except for lists (warnings/errors can be empty)
+        return {
+            k: v for k, v in data.items()
+            if v is not None or k in ["warnings", "errors"]
         }
-
-        if self.compliance_score is not None:
-            result["compliance_score"] = self.compliance_score
-        if self.compliance_grade is not None:
-            result["compliance_grade"] = self.compliance_grade
-        if self.warnings:
-            result["warnings"] = self.warnings
-        if self.errors:
-            result["errors"] = self.errors
-
-        return result
 
     def has_critical_errors(self) -> bool:
         """
@@ -534,13 +479,6 @@ class ErrorResponse:
         Returns:
             Dictionary with error data
         """
-        result = {
-            "status": self.status,
-            "error_code": self.error_code,
-            "message": self.message,
-        }
-
-        if self.details:
-            result["details"] = self.details
-
-        return result
+        data = asdict(self)
+        # Filter out None values
+        return {k: v for k, v in data.items() if v is not None}

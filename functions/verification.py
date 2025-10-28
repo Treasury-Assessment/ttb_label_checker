@@ -22,15 +22,23 @@ Author: TTB Label Verification System
 Date: 2025-10-27
 """
 
+import logging
 import re
 import time
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 try:
     from fuzzywuzzy import fuzz
     FUZZYWUZZY_AVAILABLE = True
 except ImportError:
     FUZZYWUZZY_AVAILABLE = False
-    print("Warning: fuzzywuzzy not installed. Install with: uv pip install python-levenshtein fuzzywuzzy")
+    logger.warning(
+        "fuzzywuzzy library not installed - falling back to exact string matching. "
+        "This will severely degrade verification accuracy. "
+        "Install with: uv pip install python-levenshtein fuzzywuzzy"
+    )
 
 from models import (
     FieldResult,
@@ -217,6 +225,10 @@ def fuzzy_match(str1: str, str2: str, threshold: float = 0.85) -> tuple[bool, fl
     """
     if not FUZZYWUZZY_AVAILABLE:
         # Fallback to exact match if fuzzywuzzy not available
+        logger.debug(
+            "Using exact string matching fallback (fuzzywuzzy not available). "
+            "Comparing: '%s' vs '%s'", str1, str2
+        )
         normalized1 = normalize_text(str1)
         normalized2 = normalize_text(str2)
         exact_match = normalized1 == normalized2
