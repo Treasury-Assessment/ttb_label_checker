@@ -24,7 +24,6 @@ Date: 2025-10-27
 
 import re
 import time
-from typing import List, Tuple, Optional
 
 try:
     from fuzzywuzzy import fuzz
@@ -34,17 +33,15 @@ except ImportError:
     print("Warning: fuzzywuzzy not installed. Install with: uv pip install python-levenshtein fuzzywuzzy")
 
 from models import (
+    FieldResult,
     FormData,
     OCRResult,
-    TextBlock,
-    BoundingBox,
-    FieldResult,
-    VerificationResult,
     ProductType,
+    TextBlock,
+    VerificationResult,
     VerificationStatus,
 )
 from ocr import normalize_text
-
 
 # ============================================================================
 # CONSTANTS - TTB Regulatory Requirements
@@ -197,7 +194,7 @@ PRODUCT_CLASS_SYNONYMS = {
 # FUZZY MATCHING UTILITIES
 # ============================================================================
 
-def fuzzy_match(str1: str, str2: str, threshold: float = 0.85) -> Tuple[bool, float]:
+def fuzzy_match(str1: str, str2: str, threshold: float = 0.85) -> tuple[bool, float]:
     """
     Compare two strings using fuzzy matching.
 
@@ -239,7 +236,7 @@ def find_text_in_ocr(
     search_text: str,
     ocr_result: OCRResult,
     threshold: float = 0.85,
-) -> Tuple[bool, Optional[str], Optional[TextBlock], float]:
+) -> tuple[bool, str | None, TextBlock | None, float]:
     """
     Search for text in OCR result using fuzzy matching.
 
@@ -373,7 +370,7 @@ def verify_product_class(
     expected_lower = expected.lower()
     ocr_text_lower = ocr_result.full_text.lower()
 
-    for base_class, synonyms in PRODUCT_CLASS_SYNONYMS.items():
+    for _base_class, synonyms in PRODUCT_CLASS_SYNONYMS.items():
         if expected_lower in synonyms or any(syn in expected_lower for syn in synonyms):
             # Check if any synonym appears in OCR text
             for synonym in synonyms:
@@ -399,7 +396,7 @@ def verify_product_class(
     )
 
 
-def extract_abv_from_text(text: str) -> Optional[float]:
+def extract_abv_from_text(text: str) -> float | None:
     """
     Extract alcohol by volume (ABV) percentage from text.
 
@@ -498,7 +495,7 @@ def verify_alcohol_content(
         )
 
 
-def extract_volume_from_text(text: str) -> Optional[Tuple[float, str]]:
+def extract_volume_from_text(text: str) -> tuple[float, str] | None:
     """
     Extract volume and unit from text.
 
@@ -1195,7 +1192,7 @@ def verify_country_of_origin(form_data: FormData, ocr_result: OCRResult) -> Fiel
 # COMPLIANCE SCORING ALGORITHM
 # ============================================================================
 
-def calculate_compliance_score(field_results: List[FieldResult]) -> Tuple[int, int, float, str]:
+def calculate_compliance_score(field_results: list[FieldResult]) -> tuple[int, int, float, str]:
     """
     Calculate weighted compliance score based on field verification results.
 
@@ -1251,7 +1248,6 @@ def calculate_compliance_score(field_results: List[FieldResult]) -> Tuple[int, i
     for field_result in field_results:
         field_name = field_result.field_name
         status = field_result.status
-        confidence = field_result.confidence
 
         # Determine field weight
         if field_name in CRITICAL_FIELDS:
@@ -1340,9 +1336,9 @@ def verify_label(
         True
     """
     start_time = time.time()
-    field_results: List[FieldResult] = []
-    warnings: List[str] = []
-    errors: List[str] = []
+    field_results: list[FieldResult] = []
+    warnings: list[str] = []
+    errors: list[str] = []
 
     # 1. Verify brand name (CRITICAL)
     brand_result = verify_brand_name(form_data.brand_name, ocr_result)

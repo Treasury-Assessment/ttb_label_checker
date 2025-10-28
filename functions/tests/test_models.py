@@ -5,15 +5,16 @@ Tests for dataclasses, enums, and model validation.
 """
 
 import pytest
+
 from models import (
-    ProductType,
-    VerificationStatus,
-    FormData,
-    FieldResult,
-    VerificationResult,
-    OCRResult,
     BoundingBox,
-    TextBlock
+    FieldResult,
+    FormData,
+    OCRResult,
+    ProductType,
+    TextBlock,
+    VerificationResult,
+    VerificationStatus,
 )
 
 

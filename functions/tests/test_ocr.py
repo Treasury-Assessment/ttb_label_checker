@@ -5,25 +5,21 @@ Tests for image validation, OCR processing, text normalization, and error correc
 Uses mocked Google Cloud Vision API.
 """
 
-import pytest
 import base64
 from io import BytesIO
+from unittest.mock import MagicMock, Mock, patch
+
+import pytest
 from PIL import Image
-from unittest.mock import Mock, patch, MagicMock
 
+from models import BoundingBox, OCRResult, TextBlock
 from ocr import (
-    validate_and_decode_image,
-    extract_text_vision_api,
-    extract_text_from_image,
-    normalize_text,
     correct_ocr_errors,
-    SUPPORTED_FORMATS,
-    MAX_IMAGE_SIZE,
-    MIN_IMAGE_DIMENSION,
-    MAX_IMAGE_DIMENSION
+    extract_text_from_image,
+    extract_text_vision_api,
+    normalize_text,
+    validate_and_decode_image,
 )
-from models import OCRResult, BoundingBox, TextBlock
-
 
 # Test Fixtures
 

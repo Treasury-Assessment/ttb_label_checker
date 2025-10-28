@@ -23,19 +23,17 @@ import io
 import os
 import re
 import time
-from typing import Tuple, Optional
+
 from PIL import Image
 
 try:
     from google.cloud import vision
-    from google.cloud.vision_v1 import types
     VISION_API_AVAILABLE = True
 except ImportError:
     VISION_API_AVAILABLE = False
     print("Warning: google-cloud-vision not installed. OCR will not work.")
 
-from models import OCRResult, TextBlock, BoundingBox
-
+from models import BoundingBox, OCRResult, TextBlock
 
 # Configuration
 SUPPORTED_FORMATS = {"JPEG", "PNG", "WEBP", "HEIC"}
@@ -98,7 +96,7 @@ def validate_and_decode_image(base64_str: str) -> Image.Image:
         try:
             image_bytes = base64.b64decode(base64_str)
         except Exception as e:
-            raise InvalidImageError(f"Invalid base64 encoding: {str(e)}")
+            raise InvalidImageError(f"Invalid base64 encoding: {str(e)}") from e
 
         # Check file size
         if len(image_bytes) > MAX_IMAGE_SIZE:
@@ -111,7 +109,7 @@ def validate_and_decode_image(base64_str: str) -> Image.Image:
         try:
             image = Image.open(io.BytesIO(image_bytes))
         except Exception as e:
-            raise InvalidImageError(f"Cannot open image: {str(e)}")
+            raise InvalidImageError(f"Cannot open image: {str(e)}") from e
 
         # Validate format
         if image.format not in SUPPORTED_FORMATS:
@@ -139,7 +137,7 @@ def validate_and_decode_image(base64_str: str) -> Image.Image:
     except InvalidImageError:
         raise
     except Exception as e:
-        raise InvalidImageError(f"Image validation failed: {str(e)}")
+        raise InvalidImageError(f"Image validation failed: {str(e)}") from e
 
 
 def preprocess_image(image: Image.Image) -> Image.Image:
@@ -306,7 +304,7 @@ def extract_text_vision_api(image: Image.Image) -> OCRResult:
     except OCRProcessingError:
         raise
     except Exception as e:
-        raise OCRProcessingError(f"OCR processing failed: {str(e)}")
+        raise OCRProcessingError(f"OCR processing failed: {str(e)}") from e
 
 
 def normalize_text(text: str) -> str:
@@ -518,7 +516,7 @@ def _boxes_overlap(box1: BoundingBox, box2: BoundingBox, tolerance: int) -> bool
 
 def search_text_fuzzy(
     text: str, ocr_result: OCRResult, threshold: float = 0.8
-) -> Tuple[bool, Optional[TextBlock], float]:
+) -> tuple[bool, TextBlock | None, float]:
     """
     Search for text in OCR result using fuzzy matching.
 

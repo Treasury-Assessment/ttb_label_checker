@@ -110,6 +110,7 @@ export default function ImageUpload({ onImageSelect, uploadedFile, disabled = fa
       {uploadedFile && (
         <div className="space-y-3">
           <div className="relative rounded-lg border border-gray-300 overflow-hidden bg-gray-50">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
               src={uploadedFile.preview}
               alt="Label preview"

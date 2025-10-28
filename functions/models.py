@@ -10,7 +10,6 @@ Date: 2025-10-27
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Optional, List
 
 
 class ProductType(Enum):
@@ -151,25 +150,25 @@ class FormData:
     alcohol_content: float
 
     # Common optional fields
-    net_contents: Optional[str] = None
-    bottler_name: Optional[str] = None
-    address: Optional[str] = None
-    country_of_origin: Optional[str] = None
-    is_imported: Optional[bool] = False
+    net_contents: str | None = None
+    bottler_name: str | None = None
+    address: str | None = None
+    country_of_origin: str | None = None
+    is_imported: bool | None = False
 
     # Spirits-specific fields
-    age_statement: Optional[str] = None
-    proof: Optional[float] = None
-    state_of_distillation: Optional[str] = None
-    commodity_statement: Optional[str] = None
+    age_statement: str | None = None
+    proof: float | None = None
+    state_of_distillation: str | None = None
+    commodity_statement: str | None = None
 
     # Wine-specific fields
-    vintage_year: Optional[int] = None
-    contains_sulfites: Optional[bool] = False
-    appellation: Optional[str] = None
+    vintage_year: int | None = None
+    contains_sulfites: bool | None = False
+    appellation: str | None = None
 
     # Beer-specific fields
-    style: Optional[str] = None
+    style: str | None = None
 
     def __post_init__(self):
         """Validate form data fields."""
@@ -297,11 +296,11 @@ class FieldResult:
     field_name: str
     status: VerificationStatus
     expected: str
-    found: Optional[str]
+    found: str | None
     confidence: float
-    location: Optional[BoundingBox] = None
+    location: BoundingBox | None = None
     message: str = ""
-    cfr_reference: Optional[str] = None
+    cfr_reference: str | None = None
 
     def __post_init__(self):
         """Validate field result data."""
@@ -356,7 +355,7 @@ class OCRResult:
     """
 
     full_text: str
-    text_blocks: List[TextBlock]
+    text_blocks: list[TextBlock]
     confidence: float
     processing_time_ms: float
     image_width: int
@@ -408,13 +407,13 @@ class VerificationResult:
 
     overall_match: bool
     confidence_score: float
-    field_results: List[FieldResult]
+    field_results: list[FieldResult]
     ocr_full_text: str
     processing_time_ms: float
-    compliance_score: Optional[int] = None
-    compliance_grade: Optional[str] = None
-    warnings: List[str] = field(default_factory=list)
-    errors: List[str] = field(default_factory=list)
+    compliance_score: int | None = None
+    compliance_grade: str | None = None
+    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
 
     def __post_init__(self):
         """Validate verification result data."""
@@ -470,7 +469,7 @@ class VerificationResult:
         """
         return len(self.errors) > 0
 
-    def get_failed_fields(self) -> List[FieldResult]:
+    def get_failed_fields(self) -> list[FieldResult]:
         """
         Get list of fields that failed verification (mismatch or not found).
 
@@ -483,7 +482,7 @@ class VerificationResult:
             if fr.status in [VerificationStatus.MISMATCH, VerificationStatus.NOT_FOUND]
         ]
 
-    def get_warnings(self) -> List[FieldResult]:
+    def get_warnings(self) -> list[FieldResult]:
         """
         Get list of fields with warnings (non-critical issues).
 
@@ -526,7 +525,7 @@ class ErrorResponse:
     status: str = "error"
     error_code: str = ""
     message: str = ""
-    details: Optional[dict] = None
+    details: dict | None = None
 
     def to_dict(self) -> dict:
         """

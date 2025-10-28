@@ -5,39 +5,33 @@ Tests for label verification logic, compliance scoring, field matching,
 and TTB regulatory requirements.
 """
 
-import pytest
-from unittest.mock import Mock, patch
 
-from verification import (
-    verify_label,
-    verify_brand_name,
-    verify_alcohol_content,
-    verify_product_class,
-    verify_government_warning,
-    verify_net_contents,
-    verify_age_statement,
-    verify_proof,
-    verify_sulfites,
-    verify_country_of_origin,
-    calculate_compliance_score,
-    parse_net_contents,
-    is_standard_size,
-    GOVERNMENT_WARNING_TEXT,
-    SPIRITS_STANDARD_SIZES_ML,
-    WINE_STANDARD_SIZES_ML,
-    FUZZY_MATCH_THRESHOLD
-)
+import pytest
+
 from models import (
-    ProductType,
+    FieldResult,
     FormData,
     OCRResult,
+    ProductType,
     VerificationResult,
-    FieldResult,
     VerificationStatus,
-    TextBlock,
-    BoundingBox
 )
-
+from verification import (
+    GOVERNMENT_WARNING_TEXT,
+    calculate_compliance_score,
+    is_standard_size,
+    parse_net_contents,
+    verify_age_statement,
+    verify_alcohol_content,
+    verify_brand_name,
+    verify_country_of_origin,
+    verify_government_warning,
+    verify_label,
+    verify_net_contents,
+    verify_product_class,
+    verify_proof,
+    verify_sulfites,
+)
 
 # Test Fixtures
 
@@ -611,12 +605,9 @@ class TestCalculateComplianceScore:
         ]
 
         for percentage, expected_grade in test_cases:
-            # Calculate what earned/max would give this percentage
-            max_score = 100
-            earned = int(percentage)
-
+            # Test grade boundaries
             _, _, actual_percentage, grade = calculate_compliance_score([])
-            # Mock the calculation
+            # Verify expected grade matches percentage range
             if percentage >= 90:
                 assert expected_grade == "A"
             elif percentage >= 80:
@@ -733,7 +724,6 @@ class TestVerifyLabel:
 
     def test_abv_mismatch(self, bourbon_form_data):
         """Test label with ABV mismatch."""
-        wrong_ocr = bourbon_form_data
         ocr_text = """
         EAGLE RARE
         STRAIGHT BOURBON WHISKEY

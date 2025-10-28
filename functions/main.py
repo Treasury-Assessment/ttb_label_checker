@@ -8,27 +8,28 @@ Author: TTB Label Verification System
 Date: 2025-10-27
 """
 
-from firebase_functions import https_fn
-from firebase_admin import initialize_app
 import json
 import traceback
+
+from firebase_admin import initialize_app
+from firebase_functions import https_fn
 
 # Initialize Firebase Admin
 initialize_app()
 
-# Import our modules
+# Import our modules (after Firebase init to ensure proper setup)
+# ruff: noqa: E402
 from models import (
+    ErrorResponse,
     FormData,
     ProductType,
-    ErrorResponse,
-    VerificationStatus,
 )
 from ocr import (
-    extract_text_from_image,
     InvalidImageError,
     OCRProcessingError,
+    extract_text_from_image,
 )
-from verification import verify_label
+from verification import verify_label as verify_label_logic
 
 
 @https_fn.on_request(cors=True, region="us-east4")
@@ -204,7 +205,7 @@ def verify_label(req: https_fn.Request) -> https_fn.Response:
 
         # STEP 2: Label Verification
         try:
-            verification_result = verify_label(form_data, ocr_result, product_type)
+            verification_result = verify_label_logic(form_data, ocr_result, product_type)
         except Exception as e:
             error_response = ErrorResponse(
                 error_code="VERIFICATION_ERROR",

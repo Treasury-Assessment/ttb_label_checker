@@ -4,9 +4,10 @@ Pytest Configuration and Shared Fixtures
 Global test configuration, fixtures, and helpers for all test modules.
 """
 
-import pytest
 import sys
 from pathlib import Path
+
+import pytest
 
 # Add parent directory to Python path so tests can import modules
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -155,7 +156,6 @@ def assert_field_result(field_result, expected_status, expected_field_name=None)
         expected_status: Expected VerificationStatus
         expected_field_name: Optional expected field name
     """
-    from models import VerificationStatus
 
     assert field_result.status == expected_status
 
@@ -188,7 +188,6 @@ def assert_compliance_grade(score, expected_grade):
 @pytest.fixture(scope="session", autouse=True)
 def set_test_env_vars(monkeypatch_session):
     """Set test environment variables for all tests."""
-    import os
 
     test_env_vars = {
         "GOOGLE_CLOUD_PROJECT_ID": "test-project",
