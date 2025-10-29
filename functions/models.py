@@ -8,7 +8,7 @@ Author: TTB Label Verification System
 Date: 2025-10-27
 """
 
-from dataclasses import dataclass, field, asdict
+from dataclasses import asdict, dataclass, field
 from enum import Enum
 
 

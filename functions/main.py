@@ -32,7 +32,6 @@ from ocr import (
 )
 from verification import verify_label as verify_label_logic
 
-
 # ============================================================================
 # PYDANTIC REQUEST MODELS
 # ============================================================================

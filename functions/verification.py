@@ -26,6 +26,17 @@ import logging
 import re
 import time
 
+from models import (
+    FieldResult,
+    FormData,
+    OCRResult,
+    ProductType,
+    TextBlock,
+    VerificationResult,
+    VerificationStatus,
+)
+from ocr import normalize_text
+
 # Configure logging
 logger = logging.getLogger(__name__)
 
@@ -39,17 +50,6 @@ except ImportError:
         "This will severely degrade verification accuracy. "
         "Install with: uv pip install python-levenshtein fuzzywuzzy"
     )
-
-from models import (
-    FieldResult,
-    FormData,
-    OCRResult,
-    ProductType,
-    TextBlock,
-    VerificationResult,
-    VerificationStatus,
-)
-from ocr import normalize_text
 
 # ============================================================================
 # CONSTANTS - TTB Regulatory Requirements
@@ -577,6 +577,40 @@ def convert_volume_to_ml(volume: float, unit: str) -> float:
     raise ValueError(f"Unknown unit: {unit}")
 
 
+def parse_net_contents(text: str) -> float | None:
+    """
+    Parse net contents string and convert to milliliters.
+
+    Convenience function that combines extract_volume_from_text and convert_volume_to_ml.
+
+    Args:
+        text: Text containing volume (e.g., "750 mL", "1 L", "25.4 fl oz")
+
+    Returns:
+        Volume in milliliters, or None if parsing fails
+
+    Example:
+        >>> parse_net_contents("750 mL")
+        750.0
+        >>> parse_net_contents("1 L")
+        1000.0
+        >>> parse_net_contents("invalid")
+        None
+    """
+    if not text:
+        return None
+
+    volume_data = extract_volume_from_text(text)
+    if not volume_data:
+        return None
+
+    volume, unit = volume_data
+    try:
+        return convert_volume_to_ml(volume, unit)
+    except ValueError:
+        return None
+
+
 def is_standard_size(volume_ml: float, product_type: ProductType, tolerance: float = 1.0) -> bool:
     """
     Check if volume matches TTB-approved standard size.
@@ -1083,6 +1117,34 @@ def verify_sulfite_declaration(form_data: FormData, ocr_result: OCRResult) -> Fi
         message="Sulfite declaration REQUIRED but not found on label (wine contains ≥10 ppm sulfites)",
         cfr_reference="27 CFR 5.63(c)(7)",
     )
+
+
+def verify_sulfites(contains_sulfites: bool, ocr_text: str) -> FieldResult:
+    """
+    Simplified sulfite verification for testing.
+
+    Wrapper around verify_sulfite_declaration for simpler API.
+
+    Args:
+        contains_sulfites: Whether wine contains sulfites (≥10 ppm)
+        ocr_text: OCR extracted text to search
+
+    Returns:
+        FieldResult with verification status
+    """
+    # Create minimal FormData and OCRResult for the full function
+    form_data = FormData(
+        brand_name="",
+        product_class="",
+        alcohol_content=0.0,
+        contains_sulfites=contains_sulfites,
+    )
+    ocr_result = OCRResult(
+        full_text=ocr_text,
+        confidence=1.0,
+        text_blocks=[],
+    )
+    return verify_sulfite_declaration(form_data, ocr_result)
 
 
 def verify_vintage(form_data: FormData, ocr_result: OCRResult) -> FieldResult:
