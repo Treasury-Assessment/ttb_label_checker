@@ -12,7 +12,7 @@ import json
 import traceback
 
 from firebase_admin import initialize_app
-from firebase_functions import https_fn
+from firebase_functions import https_fn, options
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 # Initialize Firebase Admin
@@ -81,7 +81,13 @@ class VerificationRequest(BaseModel):
         return v.lower()
 
 
-@https_fn.on_request(cors=True, region="us-east4")
+@https_fn.on_request(
+    cors=options.CorsOptions(
+        cors_origins="*",
+        cors_methods=["GET", "POST", "OPTIONS"],
+    ),
+    region="us-east4"
+)
 def verify_label(req: https_fn.Request) -> https_fn.Response:
     """
     Cloud Function to verify alcohol label against TTB requirements.
