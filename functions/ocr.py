@@ -35,15 +35,25 @@ except ImportError:
 
 from models import BoundingBox, OCRResult, TextBlock
 
-# Configuration
-SUPPORTED_FORMATS = {"JPEG", "PNG", "WEBP", "HEIC"}
-MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB in bytes
+# Configuration defaults
+DEFAULT_SUPPORTED_FORMATS = {"JPEG", "PNG", "WEBP", "HEIC"}
+DEFAULT_MAX_IMAGE_SIZE = 10 * 1024 * 1024  # 10MB in bytes
 MIN_IMAGE_DIMENSION = 100  # Minimum width/height in pixels
 MAX_IMAGE_DIMENSION = 10000  # Maximum width/height in pixels
 DEFAULT_CONFIDENCE_THRESHOLD = 0.7
 
-# Environment variables
-CONFIDENCE_THRESHOLD = float(os.getenv("OCR_CONFIDENCE_THRESHOLD", DEFAULT_CONFIDENCE_THRESHOLD))
+# Environment variables (with defaults)
+SUPPORTED_FORMATS = set(
+    os.getenv("SUPPORTED_FORMATS", "JPEG,PNG,WEBP,HEIC").upper().split(",")
+) if os.getenv("SUPPORTED_FORMATS") else DEFAULT_SUPPORTED_FORMATS
+
+MAX_IMAGE_SIZE = int(
+    os.getenv("MAX_IMAGE_SIZE", str(DEFAULT_MAX_IMAGE_SIZE))
+)
+
+CONFIDENCE_THRESHOLD = float(
+    os.getenv("OCR_CONFIDENCE_THRESHOLD", str(DEFAULT_CONFIDENCE_THRESHOLD))
+)
 
 
 class OCRError(Exception):

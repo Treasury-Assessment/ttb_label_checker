@@ -33,7 +33,7 @@ This system provides a simplified compliance pre-check for alcohol beverage labe
 - **Firebase Cloud Functions** (Python 3.11)
 - **Google Cloud Vision API** for OCR
 - **uv** package manager
-- **Firebase Storage** for temporary image storage
+- In-memory image processing (no storage needed)
 
 ### Infrastructure
 - **Firebase App Hosting** (frontend - auto-deploy on push)
@@ -59,8 +59,9 @@ ttb-label-checker/
 │   └── tsconfig.json
 ├── functions/
 │   ├── main.py                         # Cloud Function entry point
-│   ├── ocr.py                          # OCR processing (TODO)
-│   ├── verification.py                 # Verification logic (TODO)
+│   ├── ocr.py                          # OCR processing
+│   ├── verification.py                 # Verification logic
+│   ├── models.py                       # Data models
 │   ├── pyproject.toml                  # uv dependencies
 │   └── requirements.txt                # Generated requirements
 ├── .github/
@@ -94,8 +95,8 @@ npm install
 
 # Install backend dependencies
 cd ../functions
-uv venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 uv pip install -e .
 ```
 
@@ -113,66 +114,47 @@ cp .env.local.example .env.local
 Edit `.env.local` with your Firebase configuration:
 
 ```bash
-# Firebase Configuration (Get these from Firebase Console > Project Settings)
-NEXT_PUBLIC_FIREBASE_API_KEY=your-api-key-here
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=ttb-label-checker.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=ttb-label-checker
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=ttb-label-checker.appspot.com
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your-sender-id
-NEXT_PUBLIC_FIREBASE_APP_ID=your-app-id
-
 # API Endpoint (Development: use emulator, Production: use Cloud Functions URL)
-NEXT_PUBLIC_API_URL=http://localhost:5001/ttb-label-checker/us-central1
-# Production: NEXT_PUBLIC_API_URL=https://us-central1-ttb-label-checker.cloudfunctions.net
+NEXT_PUBLIC_API_URL=http://localhost:5001/ttb-label-checker/us-east4
+# Production: NEXT_PUBLIC_API_URL=https://us-east4-ttb-label-checker.cloudfunctions.net
 ```
 
-#### Backend Environment (.env)
+#### Backend Environment (.env) - OPTIONAL
 
-Copy `.env.example` to `.env` in the functions directory:
+**For local emulator testing, no `.env` file is needed!** Most configuration is auto-detected or hardcoded.
+
+If you want to customize settings or test real Vision API calls locally:
 
 ```bash
 cd functions
 cp .env.example .env
 ```
 
-Edit `.env` with your configuration:
+Edit `.env` to customize settings (all optional with sensible defaults):
 
 ```bash
-# Google Cloud Project
-GOOGLE_CLOUD_PROJECT_ID=ttb-label-checker
-GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
-
-# Firebase
-FIREBASE_STORAGE_BUCKET=ttb-label-checker.appspot.com
-
 # OCR Configuration
-OCR_CONFIDENCE_THRESHOLD=0.7
+OCR_CONFIDENCE_THRESHOLD=0.7              # Default: 0.7 (range: 0.0-1.0)
+# MAX_IMAGE_SIZE=10485760                 # Default: 10MB in bytes
+# SUPPORTED_FORMATS=JPEG,PNG,WEBP,HEIC   # Default formats (comma-separated)
 ```
 
-**Important Security Notes:**
-- ✅ `.env.local.example` and `.env.example` are committed to git (templates only)
-- ❌ `.env.local` and `.env` are in `.gitignore` (NEVER commit these)
-- ❌ Service account JSON files are in `.gitignore` (NEVER commit these)
-- 🔐 For production, use [Firebase Secrets](https://firebase.google.com/docs/functions/config-env#secret-manager) instead of .env files
+#### Enable Google Cloud Vision API (Required for Production)
 
-#### Getting Firebase Credentials
+For real OCR functionality, enable the Vision API:
 
-1. **Firebase Configuration** (for frontend):
-   - Go to [Firebase Console](https://console.firebase.google.com/)
-   - Select your project → Settings (⚙️) → General
-   - Scroll to "Your apps" → Web app → Copy configuration values
+1. **Enable Vision API** for your project:
+   - Go to [Cloud Vision API](https://console.cloud.google.com/apis/library/vision.googleapis.com)
+   - Select your project: `ttb-label-checker`
+   - Click "Enable"
 
-2. **Service Account** (for backend):
-   - Go to [Firebase Console](https://console.firebase.google.com/)
-   - Select your project → Settings (⚙️) → Service Accounts
-   - Click "Generate new private key"
-   - Save as `service-account.json` in functions directory (it's gitignored)
-   - Set `GOOGLE_APPLICATION_CREDENTIALS` to the full path
+2. **For local testing with real Vision API** (optional):
+   ```bash
+   # Authenticate with your Google Cloud account
+   gcloud auth application-default login
+   ```
 
-3. **Enable APIs**:
-   - Cloud Vision API: [Enable here](https://console.cloud.google.com/apis/library/vision.googleapis.com)
-   - Cloud Functions: Enabled automatically with Firebase
-   - Cloud Storage: Enabled automatically with Firebase
+   Without this, the emulator will work but Vision API calls will fail (OCR won't process images).
 
 ### 3. Run Locally
 
@@ -235,8 +217,11 @@ uv pip install package-name
 # Generate requirements.txt for deployment
 uv pip compile pyproject.toml -o requirements.txt
 
-# Run tests (when implemented)
+# Run tests
 pytest
+
+# Run tests with coverage
+pytest --cov
 ```
 
 ### Code Style
