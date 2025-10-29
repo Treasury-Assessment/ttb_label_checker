@@ -6,7 +6,7 @@
 export type ProductType = 'spirits' | 'wine' | 'beer';
 
 // Verification status for each field
-export type VerificationStatus = 'match' | 'mismatch' | 'not_found';
+export type VerificationStatus = 'match' | 'mismatch' | 'not_found' | 'warning' | 'error';
 
 // Form data submitted by user
 export interface LabelFormData {
@@ -15,15 +15,25 @@ export interface LabelFormData {
   product_class: string;
   alcohol_content: number;
 
-  // Optional fields
+  // Optional common fields
   net_contents?: string;
   bottler_name?: string;
   address?: string;
   country_of_origin?: string;
   is_imported?: boolean;
+
+  // Spirits-specific fields
   age_statement?: string;
-  contains_sulfites?: boolean;
+  proof?: number;
+  state_of_distillation?: string;
+  commodity_statement?: string;
+
+  // Wine-specific fields
   vintage_year?: number;
+  contains_sulfites?: boolean;
+  appellation?: string;
+
+  // Beer-specific fields
   style?: string;
 }
 
@@ -43,6 +53,8 @@ export interface FieldVerificationResult {
   found: string | null;
   confidence: number;
   location?: TextLocation;
+  message?: string;
+  cfr_reference?: string;
 }
 
 // Complete verification response from API
@@ -50,9 +62,13 @@ export interface VerificationResponse {
   status: 'success' | 'error';
   overall_match: boolean;
   confidence_score: number;
-  results: FieldVerificationResult[];
+  compliance_score?: number;
+  compliance_grade?: string;
+  field_results: FieldVerificationResult[];
   ocr_full_text: string;
   processing_time_ms: number;
+  warnings?: string[];
+  errors?: string[];
 }
 
 // Error response from API

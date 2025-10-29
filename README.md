@@ -30,10 +30,10 @@ This system provides a simplified compliance pre-check for alcohol beverage labe
 - **Framer Motion** for animations
 
 ### Backend
-- **Firebase Cloud Functions** (Python 3.13)
+- **Firebase Cloud Functions** (Python 3.11)
 - **Google Cloud Vision API** for OCR
 - **uv** package manager
-- **Firebase Storage** for temporary image storage
+- In-memory image processing (no storage needed)
 
 ### Infrastructure
 - **Firebase App Hosting** (frontend - auto-deploy on push)
@@ -59,8 +59,9 @@ ttb-label-checker/
 │   └── tsconfig.json
 ├── functions/
 │   ├── main.py                         # Cloud Function entry point
-│   ├── ocr.py                          # OCR processing (TODO)
-│   ├── verification.py                 # Verification logic (TODO)
+│   ├── ocr.py                          # OCR processing
+│   ├── verification.py                 # Verification logic
+│   ├── models.py                       # Data models
 │   ├── pyproject.toml                  # uv dependencies
 │   └── requirements.txt                # Generated requirements
 ├── .github/
@@ -94,20 +95,74 @@ npm install
 
 # Install backend dependencies
 cd ../functions
-uv venv .venv
-source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 uv pip install -e .
 ```
 
-### 2. Configure Environment
+### 2. Configure Environment Variables
 
-Copy `.env.local.example` to `.env.local` in the frontend directory and fill in your Firebase configuration:
+#### Frontend Environment (.env.local)
+
+Copy `.env.local.example` to `.env.local` in the frontend directory:
 
 ```bash
 cd frontend
 cp .env.local.example .env.local
-# Edit .env.local with your Firebase credentials
 ```
+
+Edit `.env.local` with your Firebase configuration:
+
+```bash
+# API Endpoint (Development: use emulator, Production: use Cloud Functions URL)
+NEXT_PUBLIC_API_URL=http://localhost:5001/ttb-label-checker/us-east4
+# Production: NEXT_PUBLIC_API_URL=https://us-east4-ttb-label-checker.cloudfunctions.net
+```
+
+#### Backend Environment (.env) - OPTIONAL
+
+**For local emulator testing, no `.env` file is needed!** Most configuration is auto-detected or hardcoded.
+
+If you want to customize settings or test real Vision API calls locally:
+
+```bash
+cd functions
+cp .env.example .env
+```
+
+Edit `.env` to customize settings (all optional with sensible defaults):
+
+```bash
+# OCR Configuration
+OCR_CONFIDENCE_THRESHOLD=0.7              # Default: 0.7 (range: 0.0-1.0)
+# MAX_IMAGE_SIZE=10485760                 # Default: 10MB in bytes
+# SUPPORTED_FORMATS=JPEG,PNG,WEBP,HEIC   # Default formats (comma-separated)
+```
+
+#### Authenticate with Firebase (Required for Local Development)
+
+For the Cloud Functions emulator and Vision API to work locally, you must be logged in via Firebase CLI:
+
+1. **Login to Firebase**:
+   ```bash
+   firebase login
+   ```
+
+   This authenticates you with your Google account and provides access to both Firebase services and Google Cloud APIs (including Vision API) for your project.
+
+2. **Verify your login status**:
+   ```bash
+   firebase login:list
+   ```
+
+   You should see your Google account listed.
+
+3. **Enable Vision API** for your project (one-time setup):
+   - Go to [Cloud Vision API](https://console.cloud.google.com/apis/library/vision.googleapis.com)
+   - Select your project: `ttb-label-checker`
+   - Click "Enable"
+
+**Note:** The `firebase login` command is all you need for local development. Firebase CLI authentication provides access to all necessary Google Cloud services.
 
 ### 3. Run Locally
 
@@ -158,8 +213,8 @@ npm run type-check   # TypeScript type checking
 
 ```bash
 cd functions
-uv venv .venv
-source .venv/bin/activate
+uv venv venv
+source venv/bin/activate
 
 # Install dependencies
 uv pip install -e .
@@ -170,8 +225,11 @@ uv pip install package-name
 # Generate requirements.txt for deployment
 uv pip compile pyproject.toml -o requirements.txt
 
-# Run tests (when implemented)
+# Run tests
 pytest
+
+# Run tests with coverage
+pytest --cov
 ```
 
 ### Code Style
@@ -244,7 +302,7 @@ npm test
 ### Backend Tests
 ```bash
 cd functions
-source .venv/bin/activate
+source venv/bin/activate
 pytest
 ```
 
