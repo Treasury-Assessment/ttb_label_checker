@@ -139,22 +139,30 @@ OCR_CONFIDENCE_THRESHOLD=0.7              # Default: 0.7 (range: 0.0-1.0)
 # SUPPORTED_FORMATS=JPEG,PNG,WEBP,HEIC   # Default formats (comma-separated)
 ```
 
-#### Enable Google Cloud Vision API (Required for Production)
+#### Authenticate with Firebase (Required for Local Development)
 
-For real OCR functionality, enable the Vision API:
+For the Cloud Functions emulator and Vision API to work locally, you must be logged in via Firebase CLI:
 
-1. **Enable Vision API** for your project:
+1. **Login to Firebase**:
+   ```bash
+   firebase login
+   ```
+
+   This authenticates you with your Google account and provides access to both Firebase services and Google Cloud APIs (including Vision API) for your project.
+
+2. **Verify your login status**:
+   ```bash
+   firebase login:list
+   ```
+
+   You should see your Google account listed.
+
+3. **Enable Vision API** for your project (one-time setup):
    - Go to [Cloud Vision API](https://console.cloud.google.com/apis/library/vision.googleapis.com)
    - Select your project: `ttb-label-checker`
    - Click "Enable"
 
-2. **For local testing with real Vision API** (optional):
-   ```bash
-   # Authenticate with your Google Cloud account
-   gcloud auth application-default login
-   ```
-
-   Without this, the emulator will work but Vision API calls will fail (OCR won't process images).
+**Note:** The `firebase login` command is all you need for local development. Firebase CLI authentication provides access to all necessary Google Cloud services.
 
 ### 3. Run Locally
 
@@ -205,8 +213,8 @@ npm run type-check   # TypeScript type checking
 
 ```bash
 cd functions
-uv venv .venv
-source .venv/bin/activate
+uv venv venv
+source venv/bin/activate
 
 # Install dependencies
 uv pip install -e .
@@ -294,7 +302,7 @@ npm test
 ### Backend Tests
 ```bash
 cd functions
-source .venv/bin/activate
+source venv/bin/activate
 pytest
 ```
 
