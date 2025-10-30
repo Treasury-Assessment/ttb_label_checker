@@ -145,6 +145,7 @@ class FormData:
     """
 
     # Required fields (all products)
+    # Note: alcohol_content can be -1.0 as sentinel for beer when not provided
     brand_name: str
     product_class: str
     alcohol_content: float
@@ -178,7 +179,8 @@ class FormData:
         if not self.product_class or len(self.product_class.strip()) == 0:
             raise ValueError("product_class cannot be empty")
 
-        if not 0.0 <= self.alcohol_content <= 100.0:
+        # Allow -1.0 as sentinel value for beer when ABV not provided
+        if self.alcohol_content != -1.0 and not 0.0 <= self.alcohol_content <= 100.0:
             raise ValueError("alcohol_content must be between 0 and 100")
 
         if self.proof is not None and self.proof < 0:

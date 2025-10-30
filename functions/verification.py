@@ -1269,6 +1269,17 @@ def verify_proof(form_data: FormData, ocr_result: OCRResult) -> FieldResult:
             message="Proof statement not provided (optional)",
         )
 
+    # Skip proof verification if ABV is sentinel value (beer without ABV)
+    if form_data.alcohol_content == -1.0:
+        return FieldResult(
+            field_name="proof",
+            status=VerificationStatus.MATCH,
+            expected="Not applicable",
+            found="Not applicable",
+            confidence=1.0,
+            message="Proof verification skipped (ABV not provided)",
+        )
+
     # Calculate expected proof from ABV
     expected_proof = form_data.alcohol_content * 2
 
@@ -1700,13 +1711,14 @@ def verify_label(
     if class_result.status != VerificationStatus.MATCH:
         errors.append(f"Product class '{form_data.product_class}' not found on label")
 
-    # 3. Verify alcohol content (CRITICAL)
-    abv_result = verify_alcohol_content(form_data.alcohol_content, ocr_result)
-    field_results.append(abv_result)
-    if abv_result.status == VerificationStatus.MISMATCH:
-        errors.append(abv_result.message)
-    elif abv_result.status == VerificationStatus.NOT_FOUND:
-        errors.append("Alcohol content not found on label")
+    # 3. Verify alcohol content (CRITICAL) - skip if sentinel value (beer without ABV)
+    if form_data.alcohol_content != -1.0:
+        abv_result = verify_alcohol_content(form_data.alcohol_content, ocr_result)
+        field_results.append(abv_result)
+        if abv_result.status == VerificationStatus.MISMATCH:
+            errors.append(abv_result.message)
+        elif abv_result.status == VerificationStatus.NOT_FOUND:
+            errors.append("Alcohol content not found on label")
 
     # 4. Verify net contents (if provided)
     if form_data.net_contents:

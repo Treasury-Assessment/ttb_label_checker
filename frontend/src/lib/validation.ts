@@ -52,6 +52,13 @@ export const wineFormSchema = baseFormSchema.extend({
 
 // Beer-specific schema
 export const beerFormSchema = baseFormSchema.extend({
+  alcohol_content: z.union([
+    z.number()
+      .min(0, 'ABV must be at least 0%')
+      .max(100, 'ABV must be at most 100%'),
+    z.nan(),
+    z.undefined(),
+  ]).optional(),
   style: z.string().optional(),
 });
 
