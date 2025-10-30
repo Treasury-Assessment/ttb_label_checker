@@ -40,7 +40,7 @@ class FormDataRequest(BaseModel):
     """Pydantic model for form data validation."""
     brand_name: str = Field(..., min_length=1, description="Brand or trade name")
     product_class: str = Field(..., min_length=1, description="Product class/type")
-    alcohol_content: float = Field(..., ge=0.0, le=100.0, description="Alcohol by volume percentage")
+    alcohol_content: float | None = Field(None, ge=0.0, le=100.0, description="Alcohol by volume percentage (required for spirits/wine, optional for beer)")
 
     # Common optional fields
     net_contents: str | None = Field(None, description="Volume with unit")
@@ -171,10 +171,32 @@ def verify_label(req: https_fn.Request) -> https_fn.Response:
         # Convert Pydantic models to internal dataclasses
         product_type = ProductType(verification_request.product_type)
 
+        # Product-specific validation: ABV is required for spirits and wine, optional for beer
+        # Use sentinel value -1.0 for beer when ABV not provided
+        alcohol_content_value = verification_request.form_data.alcohol_content
+
+        if alcohol_content_value is None:
+            if product_type in [ProductType.SPIRITS, ProductType.WINE]:
+                # ABV is mandatory for spirits and wine
+                error_response = ErrorResponse(
+                    error_code="INVALID_INPUT",
+                    message=f"Alcohol content is required for {product_type.value}",
+                    details={"field": "alcohol_content", "product_type": product_type.value}
+                )
+                headers = {**cors_headers, "Content-Type": "application/json"}
+                return https_fn.Response(
+                    json.dumps(error_response.to_dict()),
+                    status=400,
+                    headers=headers
+                )
+            else:
+                # Beer - use sentinel value to skip verification
+                alcohol_content_value = -1.0
+
         form_data = FormData(
             brand_name=verification_request.form_data.brand_name,
             product_class=verification_request.form_data.product_class,
-            alcohol_content=verification_request.form_data.alcohol_content,
+            alcohol_content=alcohol_content_value,
             net_contents=verification_request.form_data.net_contents,
             bottler_name=verification_request.form_data.bottler_name,
             address=verification_request.form_data.address,

@@ -91,13 +91,15 @@ export default function LabelForm({ productType, onSubmit, isLoading = false }: 
         {/* Alcohol Content */}
         <div>
           <label htmlFor="alcohol_content" className="block text-sm font-medium text-gray-700 mb-1">
-            Alcohol Content (ABV) * {productType === 'beer' && '(optional for beer)'}
+            Alcohol Content (ABV) {productType !== 'beer' && '*'} {productType === 'beer' && '(optional)'}
           </label>
           <div className="relative">
             <input
               {...register('alcohol_content', { valueAsNumber: true })}
               type="number"
               step="0.1"
+              min="0"
+              max="100"
               id="alcohol_content"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="e.g., 40.0"
@@ -200,6 +202,8 @@ export default function LabelForm({ productType, onSubmit, isLoading = false }: 
               {...register('proof', { valueAsNumber: true })}
               type="number"
               step="0.1"
+              min="0"
+              max="200"
               id="proof"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder={calculatedProof ? String(calculatedProof) : "e.g., 80"}
@@ -224,6 +228,8 @@ export default function LabelForm({ productType, onSubmit, isLoading = false }: 
             <input
               {...register('vintage_year', { valueAsNumber: true })}
               type="number"
+              min="1800"
+              max={new Date().getFullYear()}
               id="vintage_year"
               className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               placeholder="e.g., 2020"

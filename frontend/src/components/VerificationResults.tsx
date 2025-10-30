@@ -8,7 +8,7 @@
  */
 
 import { useState, useRef, useEffect } from 'react';
-import type { VerificationResponse, FieldVerificationResult, VerificationStatus } from '@/types';
+import type { VerificationResponse, VerificationStatus } from '@/types';
 
 interface VerificationResultsProps {
   results: VerificationResponse;
@@ -261,7 +261,7 @@ export default function VerificationResults({ results, imageUrl, onReVerify }: V
         <div className="space-y-3">
           <h3 className="text-lg font-semibold text-gray-900">Field-by-Field Results</h3>
 
-          <div className="space-y-3 max-h-[600px] overflow-y-auto">
+          <div className="space-y-3">
             {results.field_results.map((field, idx) => {
               const statusInfo = getStatusInfo(field.status);
               const isExpanded = expandedFields.has(field.field_name);

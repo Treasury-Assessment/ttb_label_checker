@@ -39,16 +39,26 @@ export const spiritsFormSchema = baseFormSchema.extend({
 
 // Wine-specific schema
 export const wineFormSchema = baseFormSchema.extend({
-  vintage_year: z.number()
-    .min(1800, 'Vintage year must be valid')
-    .max(new Date().getFullYear(), 'Vintage year cannot be in the future')
-    .optional(),
+  vintage_year: z.union([
+    z.number()
+      .min(1800, 'Vintage year must be valid')
+      .max(new Date().getFullYear(), 'Vintage year cannot be in the future'),
+    z.nan(),
+    z.undefined(),
+  ]).optional(),
   contains_sulfites: z.boolean().optional(),
   appellation: z.string().optional(),
 });
 
 // Beer-specific schema
 export const beerFormSchema = baseFormSchema.extend({
+  alcohol_content: z.union([
+    z.number()
+      .min(0, 'ABV must be at least 0%')
+      .max(100, 'ABV must be at most 100%'),
+    z.nan(),
+    z.undefined(),
+  ]).optional(),
   style: z.string().optional(),
 });
 

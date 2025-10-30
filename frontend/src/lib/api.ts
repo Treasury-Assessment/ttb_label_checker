@@ -37,6 +37,23 @@ export async function fileToBase64(file: File): Promise<string> {
 }
 
 /**
+ * Sanitize form data by removing NaN values and undefined fields
+ */
+function sanitizeFormData(formData: LabelFormData): LabelFormData {
+  const sanitized = { ...formData };
+
+  // Convert NaN to undefined for optional number fields
+  Object.keys(sanitized).forEach((key) => {
+    const value = sanitized[key as keyof LabelFormData];
+    if (typeof value === 'number' && isNaN(value)) {
+      delete sanitized[key as keyof LabelFormData];
+    }
+  });
+
+  return sanitized;
+}
+
+/**
  * Verify label against TTB requirements
  *
  * @param productType - Type of alcohol product (spirits, wine, beer)
@@ -53,10 +70,13 @@ export async function verifyLabel(
     // Convert image to base64
     const imageBase64 = await fileToBase64(imageFile);
 
+    // Sanitize form data to remove NaN values
+    const sanitizedFormData = sanitizeFormData(formData);
+
     // Construct request
     const request: VerificationRequest = {
       product_type: productType,
-      form_data: formData,
+      form_data: sanitizedFormData,
       image: imageBase64,
     };
 
