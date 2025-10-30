@@ -13,7 +13,12 @@ import type {
 } from '@/types';
 
 // Get API URL from environment variable
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5001/ttb-label-checker/us-east4';
+// In production (Firebase Hosting), use relative URL that rewrites to Cloud Function
+// In development (local), use emulator URL
+const API_URL = process.env.NEXT_PUBLIC_API_URL ||
+  (process.env.NODE_ENV === 'production'
+    ? '/api' // Relative URL, uses Firebase Hosting rewrite
+    : 'http://localhost:5001/ttb-label-checker/us-east4'); // Local emulator
 
 /**
  * Convert File to base64 string
