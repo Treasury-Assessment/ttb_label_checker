@@ -1,25 +1,4 @@
 {
-  "hosting": {
-    "public": "frontend/out",
-    "ignore": [
-      "firebase.json",
-      "**/.*",
-      "**/node_modules/**"
-    ],
-    "rewrites": [
-      {
-        "source": "/api/verify_label",
-        "function": {
-          "functionId": "verify_label",
-          "region": "us-east4"
-        }
-      },
-      {
-        "source": "**",
-        "destination": "/index.html"
-      }
-    ]
-  },
   "functions": [
     {
       "codebase": "default",

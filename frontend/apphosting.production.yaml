@@ -1,0 +1,9 @@
+# Firebase App Hosting - Production Environment Configuration
+# This file configures environment variables for the production environment
+
+env:
+  - variable: NEXT_PUBLIC_API_URL
+    value: https://verify-label-jiyhmpp7zq-uk.a.run.app
+    availability:
+      - BUILD
+      - RUNTIME
