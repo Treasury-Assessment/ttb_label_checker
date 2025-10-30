@@ -202,6 +202,35 @@ PRODUCT_CLASS_SYNONYMS = {
 # FUZZY MATCHING UTILITIES
 # ============================================================================
 
+def find_text_block_by_content(
+    ocr_result: OCRResult, search_terms: list[str], require_all: bool = False
+) -> TextBlock | None:
+    """
+    Find the text block containing the search terms.
+
+    Args:
+        ocr_result: OCR result with text blocks
+        search_terms: List of terms to search for (case-insensitive)
+        require_all: If True, block must contain ALL terms. If False, any term matches.
+
+    Returns:
+        TextBlock if found, None otherwise
+    """
+    for block in ocr_result.text_blocks:
+        block_lower = block.text.lower()
+
+        if require_all:
+            # All search terms must be in the block
+            if all(term.lower() in block_lower for term in search_terms):
+                return block
+        else:
+            # Any search term matches
+            if any(term.lower() in block_lower for term in search_terms):
+                return block
+
+    return None
+
+
 def fuzzy_match(str1: str, str2: str, threshold: float = 0.85) -> tuple[bool, float]:
     """
     Compare two strings using fuzzy matching.
@@ -483,21 +512,9 @@ def verify_alcohol_content(
         )
 
     # Find which text block contains the ABV for bounding box
-    # Try multiple search patterns to be flexible with OCR variations
-    abv_block = None
-    search_patterns = [
-        str(found_abv),  # "12.5"
-        f"{found_abv}%",  # "12.5%"
-        str(int(found_abv)) if found_abv == int(found_abv) else str(found_abv),  # "12" if 12.0
-    ]
-
-    for pattern in search_patterns:
-        for block in ocr_result.text_blocks:
-            if pattern in block.text:
-                abv_block = block
-                break
-        if abv_block:
-            break
+    abv_str = str(int(found_abv)) if found_abv == int(found_abv) else str(found_abv)
+    search_terms = [f"{abv_str}%", abv_str, "vol", "abv", "alc"]
+    abv_block = find_text_block_by_content(ocr_result, search_terms)
 
     # Check if within tolerance
     difference = abs(found_abv - expected)
@@ -719,16 +736,9 @@ def verify_net_contents(
     found_ml = convert_volume_to_ml(found_volume, found_unit)
 
     # Find which text block contains the volume for bounding box
-    volume_block = None
-    # Search for volume (as int if .0) and any unit variation
     vol_str = str(int(found_volume)) if found_volume.is_integer() else str(found_volume)
-
-    for block in ocr_result.text_blocks:
-        block_lower = block.text.lower()
-        # Check if block contains the volume number and common unit abbreviations
-        if vol_str in block_lower and any(unit in block_lower for unit in ["ml", "l", "oz", "liter", "litre"]):
-            volume_block = block
-            break
+    search_terms = [f"{vol_str} ml", f"{vol_str}ml", f"{vol_str} oz", vol_str]
+    volume_block = find_text_block_by_content(ocr_result, search_terms)
 
     # Compare volumes (±1ml tolerance for rounding)
     if abs(found_ml - expected_ml) <= 1.0:
@@ -833,17 +843,8 @@ def verify_government_warning(ocr_result: OCRResult, threshold: float = 0.95) ->
         )
 
     # Find which text block contains "GOVERNMENT WARNING" for bounding box
-    # Search for any variation of the warning text
-    warning_block = None
     warning_search_terms = ["government warning", "government", "warning"]
-
-    for search_term in warning_search_terms:
-        for block in ocr_result.text_blocks:
-            if search_term in block.text.lower():
-                warning_block = block
-                break
-        if warning_block:
-            break
+    warning_block = find_text_block_by_content(ocr_result, warning_search_terms)
 
     # Use fuzzy matching on full warning text
     is_match, confidence = fuzzy_match(
@@ -1096,12 +1097,9 @@ def verify_proof(form_data: FormData, ocr_result: OCRResult) -> FieldResult:
     proof_pattern = rf"{form_data.proof:.0f}\s*proof"
     if re.search(proof_pattern, ocr_result.full_text, re.IGNORECASE):
         # Find which text block contains the proof
-        proof_block = None
         proof_str = f"{form_data.proof:.0f}"
-        for block in ocr_result.text_blocks:
-            if proof_str in block.text and "proof" in block.text.lower():
-                proof_block = block
-                break
+        search_terms = [f"{proof_str} proof", f"{proof_str}proof", proof_str, "proof"]
+        proof_block = find_text_block_by_content(ocr_result, search_terms)
 
         return FieldResult(
             field_name="proof",
@@ -1155,17 +1153,11 @@ def verify_sulfite_declaration(form_data: FormData, ocr_result: OCRResult) -> Fi
     ocr_lower = ocr_result.full_text.lower()
 
     # Find which text block contains sulfites
-    sulfite_block = None
     for keyword in sulfite_keywords:
         if keyword in ocr_lower:
-            # Search blocks for location - try full keyword first, then just "sulfites"
-            for search_term in [keyword, "sulfites", "sulphites"]:
-                for block in ocr_result.text_blocks:
-                    if search_term in block.text.lower():
-                        sulfite_block = block
-                        break
-                if sulfite_block:
-                    break
+            # Search blocks for location
+            search_terms = ["contains sulfites", "sulfites", "sulphites", "sulfite"]
+            sulfite_block = find_text_block_by_content(ocr_result, search_terms)
 
             return FieldResult(
                 field_name="sulfites",
@@ -1246,11 +1238,7 @@ def verify_vintage(form_data: FormData, ocr_result: OCRResult) -> FieldResult:
     vintage_str = str(form_data.vintage_year)
     if vintage_str in ocr_result.full_text:
         # Find which text block contains the vintage year
-        vintage_block = None
-        for block in ocr_result.text_blocks:
-            if vintage_str in block.text:
-                vintage_block = block
-                break
+        vintage_block = find_text_block_by_content(ocr_result, [vintage_str])
 
         return FieldResult(
             field_name="vintage",
@@ -1319,6 +1307,12 @@ def verify_country_of_origin(form_data: FormData, ocr_result: OCRResult) -> Fiel
     country_lower = form_data.country_of_origin.lower()
 
     if found or f"product of {country_lower}" in ocr_lower or f"imported from {country_lower}" in ocr_lower:
+        # If we didn't find via fuzzy match, search for text block manually
+        if not text_block:
+            search_terms = [form_data.country_of_origin, f"product of {form_data.country_of_origin}",
+                          f"imported from {form_data.country_of_origin}"]
+            text_block = find_text_block_by_content(ocr_result, search_terms)
+
         return FieldResult(
             field_name="country_of_origin",
             status=VerificationStatus.MATCH,
