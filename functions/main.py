@@ -12,7 +12,7 @@ import json
 import traceback
 
 from firebase_admin import initialize_app
-from firebase_functions import https_fn, options
+from firebase_functions import https_fn
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 # Initialize Firebase Admin
@@ -81,10 +81,6 @@ class VerificationRequest(BaseModel):
 
 
 @https_fn.on_request(
-    cors=options.CorsOptions(
-        cors_origins="*",
-        cors_methods=["GET", "POST", "OPTIONS"],
-    ),
     region="us-east4"
 )
 def verify_label(req: https_fn.Request) -> https_fn.Response:
@@ -113,16 +109,25 @@ def verify_label(req: https_fn.Request) -> https_fn.Response:
     }
     """
 
+    # CORS headers for all responses
+    cors_headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+        "Access-Control-Max-Age": "3600",
+    }
+
     # Handle CORS preflight
     if req.method == "OPTIONS":
-        return https_fn.Response(status=204)
+        return https_fn.Response(status=204, headers=cors_headers)
 
     # Only accept POST requests
     if req.method != "POST":
+        headers = {**cors_headers, "Content-Type": "application/json"}
         return https_fn.Response(
             json.dumps({"status": "error", "message": "Method not allowed"}),
             status=405,
-            headers={"Content-Type": "application/json"}
+            headers=headers
         )
 
     try:
@@ -134,10 +139,11 @@ def verify_label(req: https_fn.Request) -> https_fn.Response:
                 error_code="INVALID_INPUT",
                 message="Request body must be valid JSON"
             )
+            headers = {**cors_headers, "Content-Type": "application/json"}
             return https_fn.Response(
                 json.dumps(error_response.to_dict()),
                 status=400,
-                headers={"Content-Type": "application/json"}
+                headers=headers
             )
 
         # Validate request with Pydantic
@@ -155,10 +161,11 @@ def verify_label(req: https_fn.Request) -> https_fn.Response:
                 message="Request validation failed",
                 details={"errors": error_details}
             )
+            headers = {**cors_headers, "Content-Type": "application/json"}
             return https_fn.Response(
                 json.dumps(error_response.to_dict()),
                 status=400,
-                headers={"Content-Type": "application/json"}
+                headers=headers
             )
 
         # Convert Pydantic models to internal dataclasses
@@ -194,10 +201,11 @@ def verify_label(req: https_fn.Request) -> https_fn.Response:
                 message=str(e),
                 details={"suggestion": "Please upload a clear JPEG, PNG, or WebP image"}
             )
+            headers = {**cors_headers, "Content-Type": "application/json"}
             return https_fn.Response(
                 json.dumps(error_response.to_dict()),
                 status=400,
-                headers={"Content-Type": "application/json"}
+                headers=headers
             )
         except OCRProcessingError as e:
             error_response = ErrorResponse(
@@ -205,10 +213,11 @@ def verify_label(req: https_fn.Request) -> https_fn.Response:
                 message=f"OCR processing failed: {str(e)}",
                 details={"suggestion": "Ensure image has clear, readable text"}
             )
+            headers = {**cors_headers, "Content-Type": "application/json"}
             return https_fn.Response(
                 json.dumps(error_response.to_dict()),
                 status=500,
-                headers={"Content-Type": "application/json"}
+                headers=headers
             )
 
         # Check if OCR extracted any text
@@ -221,10 +230,11 @@ def verify_label(req: https_fn.Request) -> https_fn.Response:
                     "ocr_confidence": ocr_result.confidence
                 }
             )
+            headers = {**cors_headers, "Content-Type": "application/json"}
             return https_fn.Response(
                 json.dumps(error_response.to_dict()),
                 status=400,
-                headers={"Content-Type": "application/json"}
+                headers=headers
             )
 
         # STEP 2: Label Verification
@@ -236,19 +246,21 @@ def verify_label(req: https_fn.Request) -> https_fn.Response:
                 message=f"Verification failed: {str(e)}",
                 details={"traceback": traceback.format_exc()}
             )
+            headers = {**cors_headers, "Content-Type": "application/json"}
             return https_fn.Response(
                 json.dumps(error_response.to_dict()),
                 status=500,
-                headers={"Content-Type": "application/json"}
+                headers=headers
             )
 
         # STEP 3: Return results
         response_data = verification_result.to_dict()
 
+        headers = {**cors_headers, "Content-Type": "application/json"}
         return https_fn.Response(
             json.dumps(response_data),
             status=200,
-            headers={"Content-Type": "application/json"}
+            headers=headers
         )
 
     except InvalidImageError as e:
@@ -257,10 +269,11 @@ def verify_label(req: https_fn.Request) -> https_fn.Response:
             error_code="INVALID_IMAGE",
             message=str(e)
         )
+        headers = {**cors_headers, "Content-Type": "application/json"}
         return https_fn.Response(
             json.dumps(error_response.to_dict()),
             status=400,
-            headers={"Content-Type": "application/json"}
+            headers=headers
         )
 
     except OCRProcessingError as e:
@@ -269,10 +282,11 @@ def verify_label(req: https_fn.Request) -> https_fn.Response:
             error_code="OCR_FAILED",
             message=str(e)
         )
+        headers = {**cors_headers, "Content-Type": "application/json"}
         return https_fn.Response(
             json.dumps(error_response.to_dict()),
             status=500,
-            headers={"Content-Type": "application/json"}
+            headers=headers
         )
 
     except ValueError as e:
@@ -281,10 +295,11 @@ def verify_label(req: https_fn.Request) -> https_fn.Response:
             error_code="INVALID_INPUT",
             message=str(e)
         )
+        headers = {**cors_headers, "Content-Type": "application/json"}
         return https_fn.Response(
             json.dumps(error_response.to_dict()),
             status=400,
-            headers={"Content-Type": "application/json"}
+            headers=headers
         )
 
     except Exception as e:
@@ -294,8 +309,9 @@ def verify_label(req: https_fn.Request) -> https_fn.Response:
             message=f"Unexpected error: {str(e)}",
             details={"traceback": traceback.format_exc()}
         )
+        headers = {**cors_headers, "Content-Type": "application/json"}
         return https_fn.Response(
             json.dumps(error_response.to_dict()),
             status=500,
-            headers={"Content-Type": "application/json"}
+            headers=headers
         )
