@@ -482,6 +482,23 @@ def verify_alcohol_content(
             cfr_reference="27 CFR 5.37, 4.36, 7.26",
         )
 
+    # Find which text block contains the ABV for bounding box
+    # Try multiple search patterns to be flexible with OCR variations
+    abv_block = None
+    search_patterns = [
+        str(found_abv),  # "12.5"
+        f"{found_abv}%",  # "12.5%"
+        str(int(found_abv)) if found_abv == int(found_abv) else str(found_abv),  # "12" if 12.0
+    ]
+
+    for pattern in search_patterns:
+        for block in ocr_result.text_blocks:
+            if pattern in block.text:
+                abv_block = block
+                break
+        if abv_block:
+            break
+
     # Check if within tolerance
     difference = abs(found_abv - expected)
 
@@ -492,6 +509,7 @@ def verify_alcohol_content(
             expected=f"{expected}% ABV",
             found=f"{found_abv}% ABV",
             confidence=0.95,
+            location=abv_block.bounding_box if abv_block else None,
             message=f"ABV matches: {found_abv}% (expected {expected}%, within ±{tolerance}% tolerance)",
             cfr_reference="27 CFR 5.37, 4.36, 7.26",
         )
@@ -502,6 +520,7 @@ def verify_alcohol_content(
             expected=f"{expected}% ABV",
             found=f"{found_abv}% ABV",
             confidence=0.95,
+            location=abv_block.bounding_box if abv_block else None,
             message=f"ABV mismatch: Expected {expected}%, Found {found_abv}% (difference: {difference:.1f}%, tolerance: ±{tolerance}%)",
             cfr_reference="27 CFR 5.37, 4.36, 7.26",
         )
@@ -699,6 +718,18 @@ def verify_net_contents(
     found_volume, found_unit = found_volume_data
     found_ml = convert_volume_to_ml(found_volume, found_unit)
 
+    # Find which text block contains the volume for bounding box
+    volume_block = None
+    # Search for volume (as int if .0) and any unit variation
+    vol_str = str(int(found_volume)) if found_volume.is_integer() else str(found_volume)
+
+    for block in ocr_result.text_blocks:
+        block_lower = block.text.lower()
+        # Check if block contains the volume number and common unit abbreviations
+        if vol_str in block_lower and any(unit in block_lower for unit in ["ml", "l", "oz", "liter", "litre"]):
+            volume_block = block
+            break
+
     # Compare volumes (±1ml tolerance for rounding)
     if abs(found_ml - expected_ml) <= 1.0:
         # Volume matches - check standards of fill
@@ -718,6 +749,7 @@ def verify_net_contents(
                 expected=expected,
                 found=f"{found_volume} {found_unit}",
                 confidence=0.95,
+                location=volume_block.bounding_box if volume_block else None,
                 message=f"Volume matches: {found_ml:.0f}ml (beer: any container size valid)",
                 cfr_reference=cfr_ref,
             )
@@ -729,6 +761,7 @@ def verify_net_contents(
                 expected=expected,
                 found=f"{found_volume} {found_unit}",
                 confidence=0.95,
+                location=volume_block.bounding_box if volume_block else None,
                 message=f"Volume matches: {found_ml:.0f}ml (standard size)",
                 cfr_reference=cfr_ref,
             )
@@ -740,6 +773,7 @@ def verify_net_contents(
                 expected=expected,
                 found=f"{found_volume} {found_unit}",
                 confidence=0.95,
+                location=volume_block.bounding_box if volume_block else None,
                 message=f"Volume matches ({found_ml:.0f}ml) but NON-STANDARD size for {product_type.value}. Standard sizes required per {cfr_ref}.",
                 cfr_reference=cfr_ref,
             )
@@ -751,6 +785,7 @@ def verify_net_contents(
             expected=expected,
             found=f"{found_volume} {found_unit}",
             confidence=0.95,
+            location=volume_block.bounding_box if volume_block else None,
             message=f"Volume mismatch: Expected {expected_ml:.0f}ml, Found {found_ml:.0f}ml (difference: {abs(found_ml - expected_ml):.0f}ml)",
             cfr_reference="27 CFR 5.47a, 4.71, 7.70",
         )
@@ -797,6 +832,19 @@ def verify_government_warning(ocr_result: OCRResult, threshold: float = 0.95) ->
             cfr_reference="27 CFR Part 16",
         )
 
+    # Find which text block contains "GOVERNMENT WARNING" for bounding box
+    # Search for any variation of the warning text
+    warning_block = None
+    warning_search_terms = ["government warning", "government", "warning"]
+
+    for search_term in warning_search_terms:
+        for block in ocr_result.text_blocks:
+            if search_term in block.text.lower():
+                warning_block = block
+                break
+        if warning_block:
+            break
+
     # Use fuzzy matching on full warning text
     is_match, confidence = fuzzy_match(
         GOVERNMENT_WARNING_TEXT, ocr_result.full_text, threshold
@@ -809,6 +857,7 @@ def verify_government_warning(ocr_result: OCRResult, threshold: float = 0.95) ->
             expected="GOVERNMENT WARNING: (1) According to the Surgeon General...",
             found="Government warning present",
             confidence=confidence,
+            location=warning_block.bounding_box if warning_block else None,
             message=f"Government warning matches (confidence: {confidence:.1%})",
             cfr_reference="27 CFR Part 16",
         )
@@ -822,6 +871,7 @@ def verify_government_warning(ocr_result: OCRResult, threshold: float = 0.95) ->
             expected="GOVERNMENT WARNING: (1) According to the Surgeon General...",
             found="Government warning present with variations",
             confidence=confidence,
+            location=warning_block.bounding_box if warning_block else None,
             message=f"Government warning found but may have formatting issues (confidence: {confidence:.1%})",
             cfr_reference="27 CFR Part 16",
         )
@@ -1045,12 +1095,21 @@ def verify_proof(form_data: FormData, ocr_result: OCRResult) -> FieldResult:
     # Search for proof on label
     proof_pattern = rf"{form_data.proof:.0f}\s*proof"
     if re.search(proof_pattern, ocr_result.full_text, re.IGNORECASE):
+        # Find which text block contains the proof
+        proof_block = None
+        proof_str = f"{form_data.proof:.0f}"
+        for block in ocr_result.text_blocks:
+            if proof_str in block.text and "proof" in block.text.lower():
+                proof_block = block
+                break
+
         return FieldResult(
             field_name="proof",
             status=VerificationStatus.MATCH,
             expected=f"{form_data.proof:.0f} proof",
             found=f"{form_data.proof:.0f} proof",
             confidence=0.9,
+            location=proof_block.bounding_box if proof_block else None,
             message=f"Proof statement matches: {form_data.proof:.0f} proof",
             cfr_reference="27 CFR 5.65",
         )
@@ -1095,14 +1154,26 @@ def verify_sulfite_declaration(form_data: FormData, ocr_result: OCRResult) -> Fi
     sulfite_keywords = ["contains sulfites", "sulfites", "sulphites"]
     ocr_lower = ocr_result.full_text.lower()
 
+    # Find which text block contains sulfites
+    sulfite_block = None
     for keyword in sulfite_keywords:
         if keyword in ocr_lower:
+            # Search blocks for location - try full keyword first, then just "sulfites"
+            for search_term in [keyword, "sulfites", "sulphites"]:
+                for block in ocr_result.text_blocks:
+                    if search_term in block.text.lower():
+                        sulfite_block = block
+                        break
+                if sulfite_block:
+                    break
+
             return FieldResult(
                 field_name="sulfites",
                 status=VerificationStatus.MATCH,
                 expected="Contains Sulfites",
                 found="Contains Sulfites",
                 confidence=0.9,
+                location=sulfite_block.bounding_box if sulfite_block else None,
                 message="Sulfite declaration found on label",
                 cfr_reference="27 CFR 5.63(c)(7)",
             )
@@ -1174,12 +1245,20 @@ def verify_vintage(form_data: FormData, ocr_result: OCRResult) -> FieldResult:
     # Search for vintage year (4-digit year)
     vintage_str = str(form_data.vintage_year)
     if vintage_str in ocr_result.full_text:
+        # Find which text block contains the vintage year
+        vintage_block = None
+        for block in ocr_result.text_blocks:
+            if vintage_str in block.text:
+                vintage_block = block
+                break
+
         return FieldResult(
             field_name="vintage",
             status=VerificationStatus.MATCH,
             expected=vintage_str,
             found=vintage_str,
             confidence=0.95,
+            location=vintage_block.bounding_box if vintage_block else None,
             message=f"Vintage year {vintage_str} found on label",
             cfr_reference="27 CFR 4.27",
         )
