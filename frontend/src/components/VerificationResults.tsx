@@ -7,7 +7,7 @@
  * visual indicators, and image highlighting
  */
 
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import type { VerificationResponse, FieldVerificationResult, VerificationStatus } from '@/types';
 
 interface VerificationResultsProps {
@@ -18,6 +18,12 @@ interface VerificationResultsProps {
 
 export default function VerificationResults({ results, imageUrl, onReVerify }: VerificationResultsProps) {
   const [expandedFields, setExpandedFields] = useState<Set<string>>(new Set());
+  const [highlightedField, setHighlightedField] = useState<string | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const imgRef = useRef<HTMLImageElement>(null);
+
+  // Debug: Log the results to see what backend is returning
+  console.log('Verification results:', JSON.stringify(results, null, 2));
 
   const toggleField = (fieldName: string) => {
     const newExpanded = new Set(expandedFields);
@@ -27,6 +33,86 @@ export default function VerificationResults({ results, imageUrl, onReVerify }: V
       newExpanded.add(fieldName);
     }
     setExpandedFields(newExpanded);
+  };
+
+  // Draw image with bounding boxes
+  useEffect(() => {
+    if (!imageUrl || !canvasRef.current || !imgRef.current) return;
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    const img = imgRef.current;
+
+    const drawCanvas = () => {
+      if (!ctx) return;
+
+      // Set canvas size to match image
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+
+      // Draw image
+      ctx.drawImage(img, 0, 0);
+
+      // Draw bounding boxes for all fields (or just highlighted one)
+      results.field_results.forEach((field) => {
+        // Skip fields without location data
+        if (!field.location) {
+          console.log(`Field ${field.field_name} has no location data`);
+          return;
+        }
+
+        // If highlighting a specific field, only draw that one
+        if (highlightedField !== null && field.field_name !== highlightedField) {
+          return;
+        }
+
+        const { x, y, width, height } = field.location;
+        const color = getBoxColor(field.status);
+
+        // Draw box outline
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(x, y, width, height);
+
+        // Draw semi-transparent fill
+        ctx.fillStyle = color + '40'; // Add alpha (25% opacity)
+        ctx.fillRect(x, y, width, height);
+
+        // Draw label background and text
+        const label = field.field_name.replace(/_/g, ' ').toUpperCase();
+        ctx.font = 'bold 14px sans-serif';
+        const textWidth = ctx.measureText(label).width;
+        const padding = 8;
+
+        // Label background
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y - 22, textWidth + padding, 22);
+
+        // Label text
+        ctx.fillStyle = 'white';
+        ctx.fillText(label, x + padding / 2, y - 6);
+      });
+
+      console.log(`Drew ${results.field_results.filter(f => f.location).length} bounding boxes`);
+    };
+
+    // Redraw when highlight changes
+    if (img.complete) {
+      drawCanvas();
+    } else {
+      img.onload = drawCanvas;
+    }
+  }, [imageUrl, results.field_results, highlightedField]);
+
+  // Get bounding box color for status
+  const getBoxColor = (status: VerificationStatus): string => {
+    switch (status) {
+      case 'match': return '#10B981'; // green
+      case 'mismatch': return '#EF4444'; // red
+      case 'warning': return '#F59E0B'; // yellow
+      case 'not_found': return '#6B7280'; // gray
+      default: return '#6B7280';
+    }
   };
 
   // Get status icon and color
@@ -134,79 +220,127 @@ export default function VerificationResults({ results, imageUrl, onReVerify }: V
         )}
       </div>
 
-      {/* Field Results */}
-      <div className="space-y-3">
-        <h3 className="text-lg font-semibold text-gray-900">Field-by-Field Results</h3>
-
-        {results.field_results.map((field, idx) => {
-          const statusInfo = getStatusInfo(field.status);
-          const isExpanded = expandedFields.has(field.field_name);
-
-          return (
-            <div
-              key={idx}
-              className={`border rounded-lg overflow-hidden ${statusInfo.border} ${statusInfo.bg}`}
-            >
-              {/* Field Header */}
-              <button
-                onClick={() => toggleField(field.field_name)}
-                className="w-full flex items-center justify-between p-4 hover:opacity-80 transition-opacity"
-              >
-                <div className="flex items-center space-x-3">
-                  <span className="text-2xl">{statusInfo.icon}</span>
-                  <div className="text-left">
-                    <h4 className="font-medium text-gray-900 capitalize">
-                      {field.field_name.replace(/_/g, ' ')}
-                    </h4>
-                    <p className={`text-sm ${statusInfo.color}`}>
-                      {field.status.toUpperCase()}
-                      {field.confidence > 0 && ` • ${(field.confidence * 100).toFixed(0)}% confidence`}
-                    </p>
-                  </div>
-                </div>
-
-                <svg
-                  className={`w-5 h-5 text-gray-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+      {/* Side-by-side Layout: Image and Field Results */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Left Column - Annotated Label Image */}
+        {imageUrl && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-gray-900">Annotated Label Image</h3>
+              {highlightedField && (
+                <button
+                  onClick={() => setHighlightedField(null)}
+                  className="text-sm text-blue-600 hover:text-blue-700"
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {/* Field Details (Expanded) */}
-              {isExpanded && (
-                <div className="px-4 pb-4 space-y-2 border-t border-gray-200">
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="text-gray-600 font-medium">Expected:</p>
-                      <p className="text-gray-900">{field.expected || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="text-gray-600 font-medium">Found:</p>
-                      <p className="text-gray-900">{field.found || 'Not found'}</p>
-                    </div>
-                  </div>
-
-                  {field.message && (
-                    <div className="mt-2">
-                      <p className="text-sm text-gray-700">{field.message}</p>
-                    </div>
-                  )}
-
-                  {field.cfr_reference && (
-                    <div className="mt-2">
-                      <p className="text-xs text-gray-500">
-                        Reference: {field.cfr_reference}
-                      </p>
-                    </div>
-                  )}
-                </div>
+                  Show All
+                </button>
               )}
             </div>
-          );
-        })}
+            <div className="relative border border-gray-300 rounded-lg overflow-hidden bg-gray-50">
+              {/* Hidden image for loading - using img instead of next/image for canvas ref pattern */}
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                ref={imgRef}
+                src={imageUrl}
+                alt="Label"
+                className="hidden"
+              />
+              {/* Canvas with bounding boxes */}
+              <canvas
+                ref={canvasRef}
+                className="w-full h-auto"
+              />
+            </div>
+            <p className="text-xs text-gray-600 italic">
+              Hover over fields to highlight their location
+            </p>
+          </div>
+        )}
+
+        {/* Right Column - Field Results */}
+        <div className="space-y-3">
+          <h3 className="text-lg font-semibold text-gray-900">Field-by-Field Results</h3>
+
+          <div className="space-y-3 max-h-[600px] overflow-y-auto">
+            {results.field_results.map((field, idx) => {
+              const statusInfo = getStatusInfo(field.status);
+              const isExpanded = expandedFields.has(field.field_name);
+
+              return (
+                <div
+                  key={idx}
+                  className={`border rounded-lg overflow-hidden ${statusInfo.border} ${statusInfo.bg}`}
+                >
+                  {/* Field Header */}
+                  <button
+                    onClick={() => toggleField(field.field_name)}
+                    onMouseEnter={() => field.location && setHighlightedField(field.field_name)}
+                    onMouseLeave={() => setHighlightedField(null)}
+                    className="w-full flex items-center justify-between p-3 hover:opacity-80 transition-opacity"
+                  >
+                    <div className="flex items-center space-x-3">
+                      <span className="text-xl">{statusInfo.icon}</span>
+                      <div className="text-left">
+                        <h4 className="font-medium text-gray-900 capitalize text-sm">
+                          {field.field_name.replace(/_/g, ' ')}
+                        </h4>
+                        <p className={`text-xs ${statusInfo.color}`}>
+                          {field.status.toUpperCase()}
+                          {field.confidence > 0 && ` • ${(field.confidence * 100).toFixed(0)}%`}
+                        </p>
+                      </div>
+                    </div>
+
+                    <svg
+                      className={`w-4 h-4 text-gray-500 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                    </svg>
+                  </button>
+
+                  {/* Field Details (Expanded) */}
+                  {isExpanded && (
+                    <div className="px-3 pb-3 space-y-2 border-t border-gray-200">
+                      <div className="grid grid-cols-2 gap-4 text-xs">
+                        <div>
+                          <p className="text-gray-600 font-medium">Expected:</p>
+                          <p className="text-gray-900 break-words">{field.expected || 'N/A'}</p>
+                        </div>
+                        <div>
+                          <p className="text-gray-600 font-medium">Found:</p>
+                          <p className="text-gray-900 break-words">{field.found || 'Not found'}</p>
+                        </div>
+                      </div>
+
+                      {field.message && (
+                        <div className="mt-2">
+                          <p className="text-xs text-gray-700">{field.message}</p>
+                        </div>
+                      )}
+
+                      {field.cfr_reference && (
+                        <div className="mt-2">
+                          <p className="text-xs text-gray-500">
+                            Reference: {field.cfr_reference}
+                          </p>
+                        </div>
+                      )}
+
+                      {field.location && (
+                        <div className="mt-2 text-xs text-gray-500">
+                          📍 Location: x:{Math.round(field.location.x)}, y:{Math.round(field.location.y)}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {/* OCR Preview (Collapsible) */}

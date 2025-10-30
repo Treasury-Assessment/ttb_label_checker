@@ -202,6 +202,65 @@ PRODUCT_CLASS_SYNONYMS = {
 # FUZZY MATCHING UTILITIES
 # ============================================================================
 
+def find_text_block_by_content(
+    ocr_result: OCRResult, search_terms: list[str], require_all: bool = False
+) -> TextBlock | None:
+    """
+    Find the text block containing the search terms.
+
+    Args:
+        ocr_result: OCR result with text blocks
+        search_terms: List of terms to search for (case-insensitive)
+        require_all: If True, block must contain ALL terms. If False, any term matches.
+
+    Returns:
+        TextBlock if found, None otherwise
+    """
+    for block in ocr_result.text_blocks:
+        block_lower = block.text.lower()
+
+        if require_all:
+            # All search terms must be in the block
+            if all(term.lower() in block_lower for term in search_terms):
+                return block
+        else:
+            # Any search term matches
+            if any(term.lower() in block_lower for term in search_terms):
+                return block
+
+    return None
+
+
+def find_text_block_by_regex(
+    ocr_result: OCRResult,
+    pattern: str,
+    flags: int = re.IGNORECASE
+) -> tuple[TextBlock | None, re.Match | None]:
+    """
+    Find text block matching regex pattern.
+
+    Args:
+        ocr_result: OCR result with text blocks
+        pattern: Regular expression pattern to search for
+        flags: Regex flags (default: re.IGNORECASE)
+
+    Returns:
+        Tuple of (TextBlock, Match) if found, (None, None) otherwise
+
+    Example:
+        >>> pattern = r'\b(\d+)\s*proof\b'
+        >>> block, match = find_text_block_by_regex(ocr_result, pattern)
+        >>> if match:
+        ...     proof_value = match.group(1)
+    """
+    compiled = re.compile(pattern, flags)
+    for block in ocr_result.text_blocks:
+        match = compiled.search(block.text)
+        if match:
+            return block, match
+    return None, None
+
+
 def fuzzy_match(str1: str, str2: str, threshold: float = 0.85) -> tuple[bool, float]:
     """
     Compare two strings using fuzzy matching.
@@ -482,6 +541,12 @@ def verify_alcohol_content(
             cfr_reference="27 CFR 5.37, 4.36, 7.26",
         )
 
+    # Find which text block contains the ABV for bounding box using regex
+    abv_str = str(int(found_abv)) if found_abv == int(found_abv) else str(found_abv)
+    # Pattern matches: "40% ALC/VOL", "40 % vol", "12.5% ABV", "alc.12.5% by vol."
+    pattern = rf'\b{re.escape(abv_str)}\s*%?\s*(?:alc(?:\.|/vol)?|abv|vol|alcohol)\b'
+    abv_block, _ = find_text_block_by_regex(ocr_result, pattern)
+
     # Check if within tolerance
     difference = abs(found_abv - expected)
 
@@ -492,6 +557,7 @@ def verify_alcohol_content(
             expected=f"{expected}% ABV",
             found=f"{found_abv}% ABV",
             confidence=0.95,
+            location=abv_block.bounding_box if abv_block else None,
             message=f"ABV matches: {found_abv}% (expected {expected}%, within ±{tolerance}% tolerance)",
             cfr_reference="27 CFR 5.37, 4.36, 7.26",
         )
@@ -502,6 +568,7 @@ def verify_alcohol_content(
             expected=f"{expected}% ABV",
             found=f"{found_abv}% ABV",
             confidence=0.95,
+            location=abv_block.bounding_box if abv_block else None,
             message=f"ABV mismatch: Expected {expected}%, Found {found_abv}% (difference: {difference:.1f}%, tolerance: ±{tolerance}%)",
             cfr_reference="27 CFR 5.37, 4.36, 7.26",
         )
@@ -699,6 +766,12 @@ def verify_net_contents(
     found_volume, found_unit = found_volume_data
     found_ml = convert_volume_to_ml(found_volume, found_unit)
 
+    # Find which text block contains the volume for bounding box using regex
+    vol_str = str(int(found_volume)) if found_volume.is_integer() else str(found_volume)
+    # Pattern matches: "750 ml", "750ml", "750ML", "25.4 fl oz", "1 Liter"
+    pattern = rf'\b{re.escape(vol_str)}\s*(?:ml|mL|ML|l|L|liter|litre|oz|fl\s*oz|ounce|pint|quart|gallon)\b'
+    volume_block, _ = find_text_block_by_regex(ocr_result, pattern)
+
     # Compare volumes (±1ml tolerance for rounding)
     if abs(found_ml - expected_ml) <= 1.0:
         # Volume matches - check standards of fill
@@ -718,6 +791,7 @@ def verify_net_contents(
                 expected=expected,
                 found=f"{found_volume} {found_unit}",
                 confidence=0.95,
+                location=volume_block.bounding_box if volume_block else None,
                 message=f"Volume matches: {found_ml:.0f}ml (beer: any container size valid)",
                 cfr_reference=cfr_ref,
             )
@@ -729,6 +803,7 @@ def verify_net_contents(
                 expected=expected,
                 found=f"{found_volume} {found_unit}",
                 confidence=0.95,
+                location=volume_block.bounding_box if volume_block else None,
                 message=f"Volume matches: {found_ml:.0f}ml (standard size)",
                 cfr_reference=cfr_ref,
             )
@@ -740,6 +815,7 @@ def verify_net_contents(
                 expected=expected,
                 found=f"{found_volume} {found_unit}",
                 confidence=0.95,
+                location=volume_block.bounding_box if volume_block else None,
                 message=f"Volume matches ({found_ml:.0f}ml) but NON-STANDARD size for {product_type.value}. Standard sizes required per {cfr_ref}.",
                 cfr_reference=cfr_ref,
             )
@@ -751,6 +827,7 @@ def verify_net_contents(
             expected=expected,
             found=f"{found_volume} {found_unit}",
             confidence=0.95,
+            location=volume_block.bounding_box if volume_block else None,
             message=f"Volume mismatch: Expected {expected_ml:.0f}ml, Found {found_ml:.0f}ml (difference: {abs(found_ml - expected_ml):.0f}ml)",
             cfr_reference="27 CFR 5.47a, 4.71, 7.70",
         )
@@ -786,6 +863,13 @@ def verify_government_warning(ocr_result: OCRResult, threshold: float = 0.95) ->
         if keyword.lower() not in ocr_text_lower:
             missing_keywords.append(keyword)
 
+    # Special check: "Surgeon General" MUST have capital S and G (27 CFR Part 16)
+    # Accepts: "Surgeon General", "SURGEON GENERAL", but rejects: "surgeon general", "surgeon General"
+    surgeon_general_pattern = r'\bS[Uu][Rr][Gg][Ee][Oo][Nn]\s+G[Ee][Nn][Ee][Rr][Aa][Ll]\b'
+    if not re.search(surgeon_general_pattern, ocr_result.full_text):
+        if "surgeon general" not in missing_keywords:
+            missing_keywords.append("surgeon general")
+
     if missing_keywords:
         return FieldResult(
             field_name="government_warning",
@@ -796,6 +880,10 @@ def verify_government_warning(ocr_result: OCRResult, threshold: float = 0.95) ->
             message=f"Government warning incomplete or missing. Missing keywords: {', '.join(missing_keywords)}",
             cfr_reference="27 CFR Part 16",
         )
+
+    # Find which text block contains "GOVERNMENT WARNING" for bounding box
+    warning_search_terms = ["government warning", "government", "warning"]
+    warning_block = find_text_block_by_content(ocr_result, warning_search_terms)
 
     # Use fuzzy matching on full warning text
     is_match, confidence = fuzzy_match(
@@ -809,6 +897,7 @@ def verify_government_warning(ocr_result: OCRResult, threshold: float = 0.95) ->
             expected="GOVERNMENT WARNING: (1) According to the Surgeon General...",
             found="Government warning present",
             confidence=confidence,
+            location=warning_block.bounding_box if warning_block else None,
             message=f"Government warning matches (confidence: {confidence:.1%})",
             cfr_reference="27 CFR Part 16",
         )
@@ -822,6 +911,7 @@ def verify_government_warning(ocr_result: OCRResult, threshold: float = 0.95) ->
             expected="GOVERNMENT WARNING: (1) According to the Surgeon General...",
             found="Government warning present with variations",
             confidence=confidence,
+            location=warning_block.bounding_box if warning_block else None,
             message=f"Government warning found but may have formatting issues (confidence: {confidence:.1%})",
             cfr_reference="27 CFR Part 16",
         )
@@ -971,20 +1061,30 @@ def verify_age_statement(
             cfr_reference="27 CFR 5.74",
         )
 
-    # Search for age statement on label
+    # Search for age statement on label using both fuzzy match and regex
     found, matched_text, text_block, confidence = find_text_in_ocr(
         form_data.age_statement, ocr_result, threshold=0.85
     )
 
-    if found:
+    # Also try regex pattern to catch TTB-approved age formats
+    # Pattern matches: "Aged 4 years", "4 year old", "Aged at least 12 years", "18 months old"
+    age_pattern = r'\b(?:aged?|age)\s+(?:at\s+least\s+|a\s+minimum\s+of\s+)?(\d+)\s+(?:years?|yrs?|months?|mos?)\s*(?:old)?\b'
+    regex_block, age_match = find_text_block_by_regex(ocr_result, age_pattern)
+
+    # Use whichever method found a result
+    if found or regex_block:
+        final_block = text_block if found else regex_block
+        final_text = matched_text if found else (age_match.group(0) if age_match else form_data.age_statement)
+        final_confidence = confidence if found else 0.9
+
         return FieldResult(
             field_name="age_statement",
             status=VerificationStatus.MATCH,
             expected=form_data.age_statement,
-            found=matched_text or form_data.age_statement,
-            confidence=confidence,
-            location=text_block.bounding_box if text_block else None,
-            message=f"Age statement matches (confidence: {confidence:.1%})",
+            found=final_text or form_data.age_statement,
+            confidence=final_confidence,
+            location=final_block.bounding_box if final_block else None,
+            message=f"Age statement matches (confidence: {final_confidence:.1%})",
             cfr_reference="27 CFR 5.74",
         )
     else:
@@ -1042,15 +1142,20 @@ def verify_proof(form_data: FormData, ocr_result: OCRResult) -> FieldResult:
             cfr_reference="27 CFR 5.65",
         )
 
-    # Search for proof on label
-    proof_pattern = rf"{form_data.proof:.0f}\s*proof"
+    # Search for proof on label using regex
+    proof_pattern = rf'\b{form_data.proof:.0f}\s*proof\b'
     if re.search(proof_pattern, ocr_result.full_text, re.IGNORECASE):
+        # Find which text block contains the proof using regex
+        # Pattern matches: "80 proof", "80proof", "(80 Proof)", "80 PROOF"
+        proof_block, _ = find_text_block_by_regex(ocr_result, proof_pattern)
+
         return FieldResult(
             field_name="proof",
             status=VerificationStatus.MATCH,
             expected=f"{form_data.proof:.0f} proof",
             found=f"{form_data.proof:.0f} proof",
             confidence=0.9,
+            location=proof_block.bounding_box if proof_block else None,
             message=f"Proof statement matches: {form_data.proof:.0f} proof",
             cfr_reference="27 CFR 5.65",
         )
@@ -1092,17 +1197,23 @@ def verify_sulfite_declaration(form_data: FormData, ocr_result: OCRResult) -> Fi
         )
 
     # Sulfites declared - must appear on label
-    sulfite_keywords = ["contains sulfites", "sulfites", "sulphites"]
     ocr_lower = ocr_result.full_text.lower()
 
-    for keyword in sulfite_keywords:
-        if keyword in ocr_lower:
-            return FieldResult(
+    # Use regex to match sulfite variations (handles British/American spelling)
+    # Pattern matches: "CONTAINS SULFITES", "sulfites", "sulphites", "sulfite"
+    sulfite_pattern = r'\b(?:contains\s+)?sul[fp]hite?s?\b'
+
+    if re.search(sulfite_pattern, ocr_lower):
+        # Find which text block contains sulfites using regex
+        sulfite_block, _ = find_text_block_by_regex(ocr_result, sulfite_pattern)
+
+        return FieldResult(
                 field_name="sulfites",
                 status=VerificationStatus.MATCH,
                 expected="Contains Sulfites",
                 found="Contains Sulfites",
                 confidence=0.9,
+                location=sulfite_block.bounding_box if sulfite_block else None,
                 message="Sulfite declaration found on label",
                 cfr_reference="27 CFR 5.63(c)(7)",
             )
@@ -1171,15 +1282,21 @@ def verify_vintage(form_data: FormData, ocr_result: OCRResult) -> FieldResult:
             message="Vintage year not provided (optional)",
         )
 
-    # Search for vintage year (4-digit year)
+    # Search for vintage year (4-digit year) using regex for validation
     vintage_str = str(form_data.vintage_year)
-    if vintage_str in ocr_result.full_text:
+    # Pattern ensures it's a valid year (1800-2099) and not part of a larger number
+    vintage_pattern = rf'\b{re.escape(vintage_str)}\b'
+
+    vintage_block, _ = find_text_block_by_regex(ocr_result, vintage_pattern)
+
+    if vintage_block:
         return FieldResult(
             field_name="vintage",
             status=VerificationStatus.MATCH,
             expected=vintage_str,
             found=vintage_str,
             confidence=0.95,
+            location=vintage_block.bounding_box if vintage_block else None,
             message=f"Vintage year {vintage_str} found on label",
             cfr_reference="27 CFR 4.27",
         )
@@ -1240,6 +1357,12 @@ def verify_country_of_origin(form_data: FormData, ocr_result: OCRResult) -> Fiel
     country_lower = form_data.country_of_origin.lower()
 
     if found or f"product of {country_lower}" in ocr_lower or f"imported from {country_lower}" in ocr_lower:
+        # If we didn't find via fuzzy match, search for text block manually
+        if not text_block:
+            search_terms = [form_data.country_of_origin, f"product of {form_data.country_of_origin}",
+                          f"imported from {form_data.country_of_origin}"]
+            text_block = find_text_block_by_content(ocr_result, search_terms)
+
         return FieldResult(
             field_name="country_of_origin",
             status=VerificationStatus.MATCH,
