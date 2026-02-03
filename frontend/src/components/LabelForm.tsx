@@ -28,7 +28,7 @@ export default function LabelForm({ productType, onSubmit, isLoading = false }: 
     reset,
     watch,
   } = useForm<LabelFormData>({
-    resolver: zodResolver(schema),
+    resolver: zodResolver(schema) as any,
   });
 
   const isImported = watch('is_imported');
@@ -78,8 +78,8 @@ export default function LabelForm({ productType, onSubmit, isLoading = false }: 
             className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
             placeholder={
               productType === 'spirits' ? 'e.g., Bourbon Whiskey' :
-              productType === 'wine' ? 'e.g., Cabernet Sauvignon' :
-              'e.g., India Pale Ale'
+                productType === 'wine' ? 'e.g., Cabernet Sauvignon' :
+                  'e.g., India Pale Ale'
             }
             disabled={isLoading}
           />
